@@ -39,6 +39,7 @@
 namespace modernime {
 namespace {
 constexpr size_t kCandidatePageCount = 5;
+constexpr uint64_t kVoiceReleaseTailUs = 180'000;
 
 class ModernCandidate final : public fcitx::CandidateWord {
 public:
@@ -172,6 +173,7 @@ void ModernEngine::requestVoice(fcitx::InputContext *context) {
     current->voice_session_id = id.toUtf8().toStdString();
     current->voice_recording = true;
     QDBusInterface service(QStringLiteral("org.modernime.Service1"), QStringLiteral("/org/modernime/Service1"), QStringLiteral("org.modernime.Service1"), QDBusConnection::sessionBus());
+    service.setTimeout(6'000);
     // Do not leave a key-held session marked as recording when the service
     // cannot start it. A blocking call is short after the worker's initial
     // model load and gives the F8 release a definite session state.
@@ -186,6 +188,7 @@ void ModernEngine::stopVoice(fcitx::InputContext *context) {
     auto *current = state(context);
     if (current->voice_session_id.empty() || !current->voice_recording) return;
     QDBusInterface service(QStringLiteral("org.modernime.Service1"), QStringLiteral("/org/modernime/Service1"), QStringLiteral("org.modernime.Service1"), QDBusConnection::sessionBus());
+    service.setTimeout(6'000);
     const auto reply = service.call(QStringLiteral("StopVoice"), QString::fromUtf8(current->voice_session_id));
     current->voice_recording = false;
     const bool stopped = reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().empty() && reply.arguments().front().toBool();
@@ -207,9 +210,11 @@ bool ModernEngine::commitVoiceResult(fcitx::InputContext *context) {
     // delivered asynchronously through the service, so reading only the
     // service cache races the F8 release and used to make Enter reach Codex.
     QDBusInterface worker(QStringLiteral("org.modernime.VoiceWorker1"), QStringLiteral("/org/modernime/VoiceWorker1"), QStringLiteral("org.modernime.VoiceWorker1"), QDBusConnection::sessionBus());
+    worker.setTimeout(500);
     auto result = decode(worker.call(QStringLiteral("GetResult"), session));
     if (!result) {
         QDBusInterface service(QStringLiteral("org.modernime.Service1"), QStringLiteral("/org/modernime/Service1"), QStringLiteral("org.modernime.Service1"), QDBusConnection::sessionBus());
+        service.setTimeout(500);
         result = decode(service.call(QStringLiteral("GetVoiceResult"), session));
     }
     if (!result || result->state != VoiceState::Review || result->focus_generation != current->focus_generation || result->text.empty()) return false;
@@ -260,7 +265,7 @@ void ModernEngine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &ev
                 // stops recording after this small debounce interval.
                 const auto generation = current->focus_generation;
                 auto release = instance_->eventLoop().addTimeEvent(
-                    CLOCK_MONOTONIC, fcitx::now(CLOCK_MONOTONIC) + 50'000, 0,
+                    CLOCK_MONOTONIC, fcitx::now(CLOCK_MONOTONIC) + kVoiceReleaseTailUs, 0,
                     [this, context, generation](fcitx::EventSourceTime *, uint64_t) {
                         auto *latest = state(context);
                         if (latest->focus_generation == generation && latest->f8_pressed) {

@@ -36,6 +36,7 @@ add_library(modern-ime-contracts
     src/contracts/contracts.cpp
     src/contracts/xdg.cpp
     src/contracts/logging.cpp
+    src/contracts/voice_model.cpp
 )
 target_include_directories(modern-ime-contracts PUBLIC src)
 target_link_libraries(modern-ime-contracts PUBLIC Qt6::Core)

@@ -21,7 +21,7 @@ modern-ime-settings ── D-Bus ── modern-ime-service
 | `language-core` | 合并用户词条、libime 拼音候选和原文候选。 |
 | `modern-ime-candidate-ui` | 通过 `org.modernime.UI1` 接收完整快照并渲染无焦点候选窗。 |
 | `modern-ime-service` | 保存配置和词库、发现麦克风、管理 voice worker、修复 Fcitx profile。 |
-| `modern-ime-voice-worker` | 从指定 PipeWire source 采集音频并调用 sherpa-onnx 流式识别。 |
+| `modern-ime-voice-worker` | 常驻但暂停指定 PipeWire source，按会话采集音频并执行 VAD、流式 ASR 和标点恢复。 |
 | `modern-ime-settings` | 通过 Service D-Bus 修改配置和词库。 |
 
 键盘链路：`KeyEvent → engine → language-core → Fcitx InputPanel/UI1 → commitString`。
@@ -46,9 +46,12 @@ modern-ime-settings ── D-Bus ── modern-ime-service
 5. 语音最终提交在 Fcitx 延迟事件中完成，并校验 session、输入上下文和 focus generation；不要从 worker 线程直接提交到应用。
 6. `RepairFcitx` 只能向当前输入法组补回 `modernime`，不得调用会重置整个列表的 `ResetIMList`。
 7. `.monitor` source 是输出监听设备，不能作为麦克风保存。敏感输入上下文不得启动语音。
+8. worker 必须先建立暂停的 PipeWire 流并后台预热模型；开始会话时先激活采集再等待冷模型，保证首句音频进入环形缓冲。暂停状态不得接收或保存采样。
+9. ASR 模型通过受限的 `model.json` manifest 解析。只有 transducer + `modified_beam_search` 可启用热词；`cjkchar+bpe` 模型必须同时提供 `bpe_vocab`。
+10. 个人词条的选择计数必须和词条 upsert 在同一 SQLite 事务中分别执行；`sqlite3_prepare_v2` 不会自动执行同一字符串中的后续 SQL。语音热词最多 256 条，必须去重并按词条类型/选择次数筛选；`cjkchar` 模型还要逐字符校验 `tokens.txt`，不能把 OOV 字符交给解码器。
 
 ## 当前候选和提交规则
 
 候选顺序为：未禁用用户词条 → libime 拼音候选 → 原文候选。用户词条按固定、手动、选择次数、最近时间、权重和文本排序。
 
-`normalizeForCommit` 当前只合并连续空白并去掉尾部空白；不会补标点或重写 ASR 文本。个人词库只影响键盘候选，尚未接入 ASR 热词或纠正。
+`normalizeForCommit` 合并连续空白并去掉尾部空白。语音 worker 在最终结果阶段使用本地 CT-Transformer 恢复标点；Service 将固定/手动词条和达到门槛的已学习词条写入 `voice-hotwords.txt`，模型重载后用于 ASR 上下文偏置。单字学习词不进入热词，两字学习词至少被选择两次，三字及以上学习词可以保留；热词文件经过字符安全校验和模型词表过滤。数字、日期和单位尚未做完整逆规范化。

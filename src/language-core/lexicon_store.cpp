@@ -65,7 +65,46 @@ std::optional<Lexeme> LexiconStore::upsert(Lexeme lexeme) {
 bool LexiconStore::remove(int64_t id) { std::scoped_lock lock(mutex_); sqlite3_stmt *statement = nullptr; if (!database_handle_ || sqlite3_prepare_v2(database_handle_, "DELETE FROM lexeme WHERE id=?1", -1, &statement, nullptr) != SQLITE_OK) return false; sqlite3_bind_int64(statement, 1, id); const bool result = sqlite3_step(statement) == SQLITE_DONE; sqlite3_finalize(statement); return result; }
 bool LexiconStore::clearLearned() { std::scoped_lock lock(mutex_); return execute("DELETE FROM lexeme WHERE kind='learned'"); }
 bool LexiconStore::recordSelection(std::string_view reading, std::string_view output) {
-    std::scoped_lock lock(mutex_); if (!database_handle_) return false; const char *sql = "INSERT INTO lexeme(reading,output,language_tag,kind,created_at,updated_at) VALUES(?1,?2,'und','learned',?3,?3) ON CONFLICT(reading,output) DO UPDATE SET updated_at=excluded.updated_at; INSERT INTO selection_stat(lexeme_id,select_count,last_selected_at) SELECT id,1,?3 FROM lexeme WHERE reading=?1 AND output=?2 ON CONFLICT(lexeme_id) DO UPDATE SET select_count=select_count+1,last_selected_at=excluded.last_selected_at"; char *error = nullptr; sqlite3_stmt *statement = nullptr; if (sqlite3_exec(database_handle_, "BEGIN IMMEDIATE", nullptr, nullptr, &error) != SQLITE_OK || sqlite3_prepare_v2(database_handle_, sql, -1, &statement, nullptr) != SQLITE_OK) { sqlite3_free(error); execute("ROLLBACK"); return false; } bindText(statement, 1, reading); bindText(statement, 2, output); sqlite3_bind_int64(statement, 3, nowSeconds()); const bool result = sqlite3_step(statement) == SQLITE_DONE && execute("COMMIT"); sqlite3_finalize(statement); if (!result) execute("ROLLBACK"); return result;
+    if (reading.empty() || output.empty() || reading.size() > 256 || output.size() > 1024) return false;
+    std::scoped_lock lock(mutex_);
+    if (!database_handle_ || !execute("BEGIN IMMEDIATE")) return false;
+    const auto rollback = [this] {
+        execute("ROLLBACK");
+        return false;
+    };
+    const int64_t now = nowSeconds();
+    sqlite3_stmt *statement = nullptr;
+    const char *upsert = "INSERT INTO lexeme(reading,output,language_tag,kind,created_at,updated_at) VALUES(?1,?2,'und','learned',?3,?3) ON CONFLICT(reading,output) DO UPDATE SET updated_at=excluded.updated_at";
+    if (sqlite3_prepare_v2(database_handle_, upsert, -1, &statement, nullptr) != SQLITE_OK) {
+        setError(sqlite3_errmsg(database_handle_));
+        return rollback();
+    }
+    bindText(statement, 1, reading);
+    bindText(statement, 2, output);
+    sqlite3_bind_int64(statement, 3, now);
+    const bool upserted = sqlite3_step(statement) == SQLITE_DONE;
+    sqlite3_finalize(statement);
+    if (!upserted) {
+        setError(sqlite3_errmsg(database_handle_));
+        return rollback();
+    }
+
+    const char *increment = "INSERT INTO selection_stat(lexeme_id,select_count,last_selected_at) SELECT id,1,?3 FROM lexeme WHERE reading=?1 AND output=?2 ON CONFLICT(lexeme_id) DO UPDATE SET select_count=select_count+1,last_selected_at=excluded.last_selected_at";
+    if (sqlite3_prepare_v2(database_handle_, increment, -1, &statement, nullptr) != SQLITE_OK) {
+        setError(sqlite3_errmsg(database_handle_));
+        return rollback();
+    }
+    bindText(statement, 1, reading);
+    bindText(statement, 2, output);
+    sqlite3_bind_int64(statement, 3, now);
+    const bool incremented = sqlite3_step(statement) == SQLITE_DONE;
+    sqlite3_finalize(statement);
+    if (!incremented) {
+        setError(sqlite3_errmsg(database_handle_));
+        return rollback();
+    }
+    if (!execute("COMMIT")) return rollback();
+    return true;
 }
 
 std::string LexiconStore::exportJson() const { QJsonArray entries; for (const auto &item : list()) entries.append(QJsonObject{{QStringLiteral("reading"), asQString(item.reading)}, {QStringLiteral("output"), asQString(item.output)}, {QStringLiteral("language_tag"), asQString(item.language_tag)}, {QStringLiteral("kind"), asQString(item.kind)}, {QStringLiteral("pinned"), item.pinned}, {QStringLiteral("blocked"), item.blocked}, {QStringLiteral("base_weight"), item.base_weight}}); return QJsonDocument(QJsonObject{{QStringLiteral("format"), QStringLiteral("modern-ime-lexicon")}, {QStringLiteral("version"), static_cast<int>(kLexiconFormatVersion)}, {QStringLiteral("entries"), entries}}).toJson(QJsonDocument::Compact).toStdString(); }

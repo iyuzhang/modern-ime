@@ -28,10 +28,21 @@ bool SherpaApi::load(const QString &libraryPath, QString *error) {
            loadSymbol(library_, decode, "SherpaOnnxDecodeOnlineStream", error) &&
            loadSymbol(library_, getResult, "SherpaOnnxGetOnlineStreamResult", error) &&
            loadSymbol(library_, destroyResult, "SherpaOnnxDestroyOnlineRecognizerResult", error) &&
-           loadSymbol(library_, inputFinished, "SherpaOnnxOnlineStreamInputFinished", error);
+           loadSymbol(library_, inputFinished, "SherpaOnnxOnlineStreamInputFinished", error) &&
+           loadSymbol(library_, createVoiceActivityDetector, "SherpaOnnxCreateVoiceActivityDetector", error) &&
+           loadSymbol(library_, destroyVoiceActivityDetector, "SherpaOnnxDestroyVoiceActivityDetector", error) &&
+           loadSymbol(library_, vadAcceptWaveform, "SherpaOnnxVoiceActivityDetectorAcceptWaveform", error) &&
+           loadSymbol(library_, vadEmpty, "SherpaOnnxVoiceActivityDetectorEmpty", error) &&
+           loadSymbol(library_, vadDetected, "SherpaOnnxVoiceActivityDetectorDetected", error) &&
+           loadSymbol(library_, vadReset, "SherpaOnnxVoiceActivityDetectorReset", error) &&
+           loadSymbol(library_, vadFlush, "SherpaOnnxVoiceActivityDetectorFlush", error) &&
+           loadSymbol(library_, createOfflinePunctuation, "SherpaOnnxCreateOfflinePunctuation", error) &&
+           loadSymbol(library_, destroyOfflinePunctuation, "SherpaOnnxDestroyOfflinePunctuation", error) &&
+           loadSymbol(library_, addOfflinePunctuation, "SherpaOfflinePunctuationAddPunct", error) &&
+           loadSymbol(library_, freeOfflinePunctuationText, "SherpaOfflinePunctuationFreeText", error);
 }
 
 bool SherpaApi::ready() const {
-    return library_.isLoaded() && createRecognizer && destroyRecognizer && createStream && destroyStream && acceptWaveform && isReady && decode && getResult && destroyResult && inputFinished;
+    return library_.isLoaded() && createRecognizer && destroyRecognizer && createStream && destroyStream && acceptWaveform && isReady && decode && getResult && destroyResult && inputFinished && createVoiceActivityDetector && destroyVoiceActivityDetector && vadAcceptWaveform && vadEmpty && vadDetected && vadReset && vadFlush && createOfflinePunctuation && destroyOfflinePunctuation && addOfflinePunctuation && freeOfflinePunctuationText;
 }
 } // namespace modernime

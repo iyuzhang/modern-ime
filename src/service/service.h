@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QProcess>
 #include <QHash>
+#include <QTimer>
 
 namespace modernime {
 
@@ -28,6 +29,7 @@ public slots:
     bool ImportLexicon(const QString &serialized);
     QString Diagnostics();
     QString ListMicrophones();
+    QString ListVoiceModels();
     bool RepairFcitx();
     bool StartVoice(const QString &sessionId, qulonglong focusGeneration);
     bool StopVoice(const QString &sessionId);
@@ -40,6 +42,7 @@ signals:
     void VoiceUpdated(const QString &serialized);
 
 private slots:
+    void prewarmVoiceWorker();
     void onVoiceWorkerFinished(int exitCode, QProcess::ExitStatus status);
     void onVoiceEvent(const QString &serialized);
 
@@ -47,6 +50,8 @@ private:
     bool loadConfig();
     bool saveConfig();
     bool ensureVoiceWorker();
+    void refreshVoiceHotwords();
+    void restartVoiceWorkerForModelConfig();
     bool selectedMicrophoneAvailable() const;
     bool validHotkeys(const ConfigSnapshot &config) const;
     void publishVoiceEvent(const VoiceEvent &event);
@@ -55,6 +60,7 @@ private:
     LanguageCore language_;
     ConfigSnapshot config_;
     QProcess voice_worker_;
+    QTimer voice_hotword_refresh_timer_;
     QString voice_worker_source_;
     QString voice_worker_model_;
     QHash<QString, QString> voice_results_;

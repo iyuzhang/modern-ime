@@ -150,6 +150,7 @@ QString CandidateController::voiceErrorText() const {
     case ErrorCode::RecognizerTooSlow: return QStringLiteral("语音识别速度过慢");
     case ErrorCode::FocusChanged: return QStringLiteral("输入焦点已改变");
     case ErrorCode::EmptySpeech: return QStringLiteral("未检测到语音");
+    case ErrorCode::RecognizerNoResult: return QStringLiteral("听到了语音，但未识别出文字");
     case ErrorCode::StorageFailure: return QStringLiteral("语音配置无法保存");
     default: return QStringLiteral("语音请求未完成");
     }
@@ -158,6 +159,7 @@ QString CandidateController::voiceErrorHint() const {
     switch (voice_.error.value_or(ErrorCode::InvalidRequest)) {
     case ErrorCode::AudioDeviceMissing: return QStringLiteral("检查麦克风；蓝牙需切到 HFP/HSP");
     case ErrorCode::EmptySpeech: return QStringLiteral("靠近麦克风说话；蓝牙请保持 HFP/HSP 通话模式");
+    case ErrorCode::RecognizerNoResult: return QStringLiteral("短词或专名可加入个人词库后重试");
     default: return QStringLiteral("Esc 关闭");
     }
 }

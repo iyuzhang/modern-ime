@@ -8,9 +8,10 @@ class SettingsController final : public QObject {
     Q_PROPERTY(QString diagnostics READ diagnostics NOTIFY changed)
     Q_PROPERTY(QVariantList lexemes READ lexemes NOTIFY changed)
     Q_PROPERTY(QVariantList microphones READ microphones NOTIFY changed)
+    Q_PROPERTY(QVariantList voiceModels READ voiceModels NOTIFY changed)
 public:
     explicit SettingsController(QObject *parent = nullptr);
-    QString configJson() const; QString diagnostics() const; QVariantList lexemes() const; QVariantList microphones() const;
+    QString configJson() const; QString diagnostics() const; QVariantList lexemes() const; QVariantList microphones() const; QVariantList voiceModels() const;
 public slots:
     void refresh();
     bool saveConfig(const QString &serialized);
@@ -28,5 +29,6 @@ private:
     QString diagnostics_;
     QVariantList lexemes_;
     QVariantList microphones_;
+    QVariantList voice_models_;
 };
 }

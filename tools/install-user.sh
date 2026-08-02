@@ -51,7 +51,8 @@ install -m 0644 "$project_root/data/systemd/modern-ime-ui.service" "$HOME/.confi
 systemctl --user daemon-reload
 XDG_DATA_DIRS="$ime_xdg_data_dirs" systemctl --user import-environment XDG_DATA_DIRS
 XDG_DATA_DIRS="$ime_xdg_data_dirs" dbus-update-activation-environment --systemd XDG_DATA_DIRS
-systemctl --user enable --now modern-ime-service.service modern-ime-ui.service
+systemctl --user enable modern-ime-service.service modern-ime-ui.service
+systemctl --user restart modern-ime-service.service modern-ime-ui.service
 if fcitx5-remote --check; then
   fcitx5-remote -e || true
   sleep 1

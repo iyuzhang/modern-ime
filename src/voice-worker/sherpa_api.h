@@ -67,6 +67,39 @@ struct SherpaOnnxOnlineRecognizerResult {
 };
 struct SherpaOnnxOnlineRecognizer;
 struct SherpaOnnxOnlineStream;
+struct SherpaOnnxSileroVadModelConfig {
+    const char *model;
+    float threshold;
+    float min_silence_duration;
+    float min_speech_duration;
+    int32_t window_size;
+    float max_speech_duration;
+};
+struct SherpaOnnxTenVadModelConfig {
+    const char *model;
+    float threshold;
+    float min_silence_duration;
+    float min_speech_duration;
+    int32_t window_size;
+    float max_speech_duration;
+};
+struct SherpaOnnxVadModelConfig {
+    SherpaOnnxSileroVadModelConfig silero_vad;
+    int32_t sample_rate;
+    int32_t num_threads;
+    const char *provider;
+    int32_t debug;
+    SherpaOnnxTenVadModelConfig ten_vad;
+};
+struct SherpaOnnxVoiceActivityDetector;
+struct SherpaOnnxOfflinePunctuationModelConfig {
+    const char *ct_transformer;
+    int32_t num_threads;
+    int32_t debug;
+    const char *provider;
+};
+struct SherpaOnnxOfflinePunctuationConfig { SherpaOnnxOfflinePunctuationModelConfig model; };
+struct SherpaOnnxOfflinePunctuation;
 
 class SherpaApi final {
 public:
@@ -80,6 +113,17 @@ public:
     using GetResult = const SherpaOnnxOnlineRecognizerResult *(*)(const SherpaOnnxOnlineRecognizer *, const SherpaOnnxOnlineStream *);
     using DestroyResult = void (*)(const SherpaOnnxOnlineRecognizerResult *);
     using InputFinished = void (*)(const SherpaOnnxOnlineStream *);
+    using CreateVoiceActivityDetector = const SherpaOnnxVoiceActivityDetector *(*)(const SherpaOnnxVadModelConfig *, float);
+    using DestroyVoiceActivityDetector = void (*)(const SherpaOnnxVoiceActivityDetector *);
+    using VadAcceptWaveform = void (*)(const SherpaOnnxVoiceActivityDetector *, const float *, int32_t);
+    using VadEmpty = int32_t (*)(const SherpaOnnxVoiceActivityDetector *);
+    using VadDetected = int32_t (*)(const SherpaOnnxVoiceActivityDetector *);
+    using VadReset = void (*)(const SherpaOnnxVoiceActivityDetector *);
+    using VadFlush = void (*)(const SherpaOnnxVoiceActivityDetector *);
+    using CreateOfflinePunctuation = const SherpaOnnxOfflinePunctuation *(*)(const SherpaOnnxOfflinePunctuationConfig *);
+    using DestroyOfflinePunctuation = void (*)(const SherpaOnnxOfflinePunctuation *);
+    using AddOfflinePunctuation = const char *(*)(const SherpaOnnxOfflinePunctuation *, const char *);
+    using FreeOfflinePunctuationText = void (*)(const char *);
 
     bool load(const QString &libraryPath, QString *error);
     bool ready() const;
@@ -94,6 +138,17 @@ public:
     GetResult getResult = nullptr;
     DestroyResult destroyResult = nullptr;
     InputFinished inputFinished = nullptr;
+    CreateVoiceActivityDetector createVoiceActivityDetector = nullptr;
+    DestroyVoiceActivityDetector destroyVoiceActivityDetector = nullptr;
+    VadAcceptWaveform vadAcceptWaveform = nullptr;
+    VadEmpty vadEmpty = nullptr;
+    VadDetected vadDetected = nullptr;
+    VadReset vadReset = nullptr;
+    VadFlush vadFlush = nullptr;
+    CreateOfflinePunctuation createOfflinePunctuation = nullptr;
+    DestroyOfflinePunctuation destroyOfflinePunctuation = nullptr;
+    AddOfflinePunctuation addOfflinePunctuation = nullptr;
+    FreeOfflinePunctuationText freeOfflinePunctuationText = nullptr;
 
 private:
     QLibrary library_;

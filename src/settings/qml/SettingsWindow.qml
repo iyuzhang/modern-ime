@@ -92,6 +92,12 @@ Rectangle {
             if (settings.microphones[i].name === selected) return i
         return -1
     }
+    function voiceModelIndex() {
+        const selected = config.model_id || ""
+        for (let i = 0; i < settings.voiceModels.length; ++i)
+            if (settings.voiceModels[i].id === selected) return i
+        return -1
+    }
     function hotkeyLabel(value) {
         return (value || "未设置").replace("Control", "Ctrl").replace("bracketleft", "[").replace("bracketright", "]").replace("Page_Up", "PgUp").replace("Page_Down", "PgDn")
     }
@@ -320,6 +326,25 @@ Rectangle {
                     }
                     Text { visible: settings.microphones.length === 0; text: "没有发现可用的 PipeWire/PulseAudio 输入设备。请检查麦克风权限或在系统声音设置中启用设备。"; color: "#ffb4ab"; width: 620; wrapMode: Text.Wrap }
                     Text { text: "蓝牙耳机需先在系统声音设置中切换到 HFP/HSP（通话）模式，再选择出现的 bluez_input source。"; color: "#aeb8ca"; width: 620; wrapMode: Text.Wrap }
+                    ComboBox {
+                        id: voiceModel
+                        width: 600
+                        model: settings.voiceModels
+                        textRole: "label"
+                        valueRole: "id"
+                        currentIndex: root.voiceModelIndex()
+                        displayText: currentIndex >= 0 ? currentText : "没有已安装的语音模型"
+                        onActivated: {
+                            root.config.model_id = currentValue
+                            settings.saveConfig(JSON.stringify(root.config))
+                        }
+                    }
+                    Text {
+                        width: 620
+                        wrapMode: Text.Wrap
+                        color: "#aeb8ca"
+                        text: voiceModel.currentIndex >= 0 ? settings.voiceModels[voiceModel.currentIndex].description : "请先运行本地语音模型安装程序。"
+                    }
                     ComboBox {
                         model: ["按住说话", "点击切换"]
                         currentIndex: root.config.voice_trigger === "toggle" ? 1 : 0

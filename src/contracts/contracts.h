@@ -21,6 +21,7 @@ enum class ErrorCode {
     RecognizerTooSlow,
     FocusChanged,
     EmptySpeech,
+    RecognizerNoResult,
     InvalidRequest,
     StorageFailure,
 };
@@ -99,7 +100,7 @@ struct ConfigSnapshot {
     // Audio capture is opt-in. A machine-specific source must be selected;
     // falling back to a guessed source can silently capture the wrong device.
     std::string microphone;
-    std::string model_id = "sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20";
+    std::string model_id = "sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30";
 };
 
 struct VoiceEvent {

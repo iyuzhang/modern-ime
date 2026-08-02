@@ -1,6 +1,7 @@
 #include "service/service.h"
 
 #include "contracts/logging.h"
+#include "contracts/voice_model.h"
 #include "contracts/xdg.h"
 #include "language-core/lexicon_store.h"
 
@@ -9,14 +10,17 @@
 #include <QDBusConnectionInterface>
 #include <QDBusInterface>
 #include <QElapsedTimer>
+#include <QDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QThread>
+#include <QTimer>
 
 #include <fcitx-utils/key.h>
 
@@ -157,14 +161,26 @@ bool sourceAppearsAvailable(const QString &source) {
 
 Service::Service(QObject *parent) : QObject(parent), paths_(xdgPaths()), language_(paths_.data / "user.db") {
     ensureXdgDirectories(paths_); loadConfig();
+    refreshVoiceHotwords();
+    voice_hotword_refresh_timer_.setSingleShot(true);
+    voice_hotword_refresh_timer_.setInterval(30'000);
+    connect(&voice_hotword_refresh_timer_, &QTimer::timeout, this, [this] {
+        refreshVoiceHotwords();
+        restartVoiceWorkerForModelConfig();
+    });
     connect(&voice_worker_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this, &Service::onVoiceWorkerFinished);
     QDBusConnection::sessionBus().connect(QStringLiteral("org.modernime.VoiceWorker1"), QStringLiteral("/org/modernime/VoiceWorker1"), QStringLiteral("org.modernime.VoiceWorker1"), QStringLiteral("Event"), this, SLOT(onVoiceEvent(QString)));
+    // Model initialization is intentionally detached from the first hotkey.
+    // The event-loop turn lets main() acquire Service1 before this may spend
+    // time starting the worker and mapping the ONNX model.
+    QTimer::singleShot(0, this, &Service::prewarmVoiceWorker);
 }
 
-bool Service::loadConfig() { QFile file(pathString(paths_.config / "config.json")); if (!file.exists()) return saveConfig(); if (!file.open(QIODevice::ReadOnly)) return false; const auto parsed = parseConfigSnapshot(file.readAll().toStdString()); if (!parsed) return false; config_ = *parsed; return true; }
+bool Service::loadConfig() { QFile file(pathString(paths_.config / "config.json")); if (!file.exists()) return saveConfig(); if (!file.open(QIODevice::ReadOnly)) return false; const auto parsed = parseConfigSnapshot(file.readAll().toStdString()); if (!parsed) return false; config_ = *parsed; if (!isValidVoiceModelId(toQString(config_.model_id))) config_.model_id = kDefaultVoiceModel; return true; }
 bool Service::saveConfig() { config_.version++; QSaveFile file(pathString(paths_.config / "config.json")); if (!file.open(QIODevice::WriteOnly)) return false; file.write(QByteArray::fromStdString(serialize(config_))); return file.commit(); }
 QString Service::GetConfig() { return toQString(serialize(config_)); }
 bool Service::validHotkeys(const ConfigSnapshot &config) const {
+    if (!isValidVoiceModelId(toQString(config.model_id))) return false;
     const std::array<std::string, 7> bindings{config.voice_hotkey, config.cancel_hotkey, config.commit_raw_hotkey, config.previous_page_hotkey, config.next_page_hotkey, config.previous_candidate_hotkey, config.next_candidate_hotkey};
     std::set<std::string> seen;
     for (const auto &binding : bindings) {
@@ -173,25 +189,102 @@ bool Service::validHotkeys(const ConfigSnapshot &config) const {
     }
     return true;
 }
-bool Service::UpdateConfig(const QString &serialized) { const auto parsed = parseConfigSnapshot(toString(serialized)); if (!parsed || !validHotkeys(*parsed)) return false; auto updated = *parsed; updated.version = config_.version; config_ = std::move(updated); if (!saveConfig()) return false; QDBusInterface controller(QStringLiteral("org.fcitx.Fcitx5"), QStringLiteral("/controller"), QStringLiteral("org.fcitx.Fcitx.Controller1")); controller.asyncCall(QStringLiteral("ReloadAddonConfig"), QStringLiteral("modernime")); emit ConfigChanged(config_.version, toQString(serialize(config_))); return true; }
+bool Service::UpdateConfig(const QString &serialized) { const auto parsed = parseConfigSnapshot(toString(serialized)); if (!parsed || !validHotkeys(*parsed)) return false; auto updated = *parsed; updated.version = config_.version; config_ = std::move(updated); if (!saveConfig()) return false; QDBusInterface controller(QStringLiteral("org.fcitx.Fcitx5"), QStringLiteral("/controller"), QStringLiteral("org.fcitx.Fcitx.Controller1")); controller.asyncCall(QStringLiteral("ReloadAddonConfig"), QStringLiteral("modernime")); emit ConfigChanged(config_.version, toQString(serialize(config_))); QTimer::singleShot(0, this, &Service::prewarmVoiceWorker); return true; }
 QString Service::lexemeJson(const Lexeme &lexeme) const { QJsonObject object; object.insert(QStringLiteral("id"), static_cast<qint64>(lexeme.id)); object.insert(QStringLiteral("reading"), toQString(lexeme.reading)); object.insert(QStringLiteral("output"), toQString(lexeme.output)); object.insert(QStringLiteral("language_tag"), toQString(lexeme.language_tag)); object.insert(QStringLiteral("kind"), toQString(lexeme.kind)); object.insert(QStringLiteral("pinned"), lexeme.pinned); object.insert(QStringLiteral("blocked"), lexeme.blocked); object.insert(QStringLiteral("base_weight"), lexeme.base_weight); object.insert(QStringLiteral("select_count"), static_cast<qint64>(lexeme.select_count)); object.insert(QStringLiteral("last_selected_at"), static_cast<qint64>(lexeme.last_selected_at)); return QJsonDocument(object).toJson(QJsonDocument::Compact); }
 QString Service::ListLexemes(const QString &query) { QJsonArray entries; for (const auto &lexeme : language_.lexicon().list(toString(query))) entries.append(QJsonDocument::fromJson(lexemeJson(lexeme).toUtf8()).object()); return QJsonDocument(QJsonObject{{QStringLiteral("format"), QStringLiteral("modern-ime-lexeme-list")}, {QStringLiteral("version"), 1}, {QStringLiteral("entries"), entries}}).toJson(QJsonDocument::Compact); }
-QString Service::UpsertLexeme(const QString &serialized) { const auto object = QJsonDocument::fromJson(serialized.toUtf8()).object(); Lexeme lexeme; lexeme.reading = toString(object.value(QStringLiteral("reading")).toString()); lexeme.output = toString(object.value(QStringLiteral("output")).toString()); lexeme.language_tag = toString(object.value(QStringLiteral("language_tag")).toString(QStringLiteral("und"))); lexeme.kind = toString(object.value(QStringLiteral("kind")).toString(QStringLiteral("manual"))); lexeme.pinned = object.value(QStringLiteral("pinned")).toBool(); lexeme.blocked = object.value(QStringLiteral("blocked")).toBool(); lexeme.base_weight = object.value(QStringLiteral("base_weight")).toDouble(); const auto persisted = language_.lexicon().upsert(std::move(lexeme)); if (persisted) language_.refreshUserLexicon(); return persisted ? lexemeJson(*persisted) : QString{}; }
-bool Service::DeleteLexeme(qlonglong id) { const bool result = language_.lexicon().remove(id); if (result) language_.refreshUserLexicon(); return result; }
-bool Service::ClearLearned() { const bool result = language_.lexicon().clearLearned(); if (result) language_.refreshUserLexicon(); return result; }
-bool Service::RecordSelection(const QString &reading, const QString &output) { const bool result = language_.lexicon().recordSelection(toString(reading), toString(output)); if (result) language_.refreshUserLexicon(); return result; }
+QString Service::UpsertLexeme(const QString &serialized) {
+    const auto object = QJsonDocument::fromJson(serialized.toUtf8()).object();
+    Lexeme lexeme;
+    lexeme.reading = toString(object.value(QStringLiteral("reading")).toString());
+    lexeme.output = toString(object.value(QStringLiteral("output")).toString());
+    lexeme.language_tag = toString(object.value(QStringLiteral("language_tag")).toString(QStringLiteral("und")));
+    lexeme.kind = toString(object.value(QStringLiteral("kind")).toString(QStringLiteral("manual")));
+    lexeme.pinned = object.value(QStringLiteral("pinned")).toBool();
+    lexeme.blocked = object.value(QStringLiteral("blocked")).toBool();
+    lexeme.base_weight = object.value(QStringLiteral("base_weight")).toDouble();
+    const auto persisted = language_.lexicon().upsert(std::move(lexeme));
+    if (persisted) {
+        language_.refreshUserLexicon();
+        refreshVoiceHotwords();
+        restartVoiceWorkerForModelConfig();
+    }
+    return persisted ? lexemeJson(*persisted) : QString{};
+}
+bool Service::DeleteLexeme(qlonglong id) {
+    const bool result = language_.lexicon().remove(id);
+    if (result) {
+        language_.refreshUserLexicon();
+        refreshVoiceHotwords();
+        restartVoiceWorkerForModelConfig();
+    }
+    return result;
+}
+bool Service::ClearLearned() {
+    const bool result = language_.lexicon().clearLearned();
+    if (result) {
+        language_.refreshUserLexicon();
+        refreshVoiceHotwords();
+        restartVoiceWorkerForModelConfig();
+    }
+    return result;
+}
+bool Service::RecordSelection(const QString &reading, const QString &output) {
+    const auto readingValue = toString(reading);
+    const auto outputValue = toString(output);
+    const bool result = language_.lexicon().recordSelection(readingValue, outputValue);
+    if (!result) return false;
+    language_.refreshUserLexicon();
+    const auto entries = language_.lexicon().matching(readingValue);
+    if (std::any_of(entries.cbegin(), entries.cend(), [&outputValue](const Lexeme &entry) { return entry.output == outputValue && voiceHotwordForLexeme(entry).has_value(); })) voice_hotword_refresh_timer_.start();
+    return true;
+}
 QString Service::ExportLexicon() { return toQString(language_.lexicon().exportJson()); }
-bool Service::ImportLexicon(const QString &serialized) { std::string reason; const bool result = language_.lexicon().importJson(toString(serialized), &reason); if (result) language_.refreshUserLexicon(); else logError("service", reason); return result; }
+bool Service::ImportLexicon(const QString &serialized) { std::string reason; const bool result = language_.lexicon().importJson(toString(serialized), &reason); if (result) { language_.refreshUserLexicon(); refreshVoiceHotwords(); restartVoiceWorkerForModelConfig(); } else logError("service", reason); return result; }
 QString Service::Diagnostics() {
     const auto config = paths_.config; const auto data = paths_.data; const auto state = paths_.state;
     QDBusInterface controller(QStringLiteral("org.fcitx.Fcitx5"), QStringLiteral("/controller"), QStringLiteral("org.fcitx.Fcitx.Controller1"));
     const auto addon = controller.call(QStringLiteral("AddonForIM"), QStringLiteral("modernime"));
     const auto profile = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QStringLiteral("/fcitx5/profile");
     const bool profileContainsModernIme = readFcitxProfile(profile).contains_modernime;
-    QJsonObject result; result.insert(QStringLiteral("protocol_version"), static_cast<int>(kProtocolVersion)); result.insert(QStringLiteral("service_pid"), QCoreApplication::applicationPid()); result.insert(QStringLiteral("config_path"), pathString(config)); result.insert(QStringLiteral("data_path"), pathString(data)); result.insert(QStringLiteral("state_path"), pathString(state)); result.insert(QStringLiteral("lexicon_healthy"), language_.lexicon().healthy()); result.insert(QStringLiteral("lexicon_error"), toQString(language_.lexicon().lastError())); result.insert(QStringLiteral("voice_worker_running"), voice_worker_.state() != QProcess::NotRunning); result.insert(QStringLiteral("selected_microphone"), toQString(config_.microphone)); result.insert(QStringLiteral("selected_microphone_available"), selectedMicrophoneAvailable()); result.insert(QStringLiteral("model_id"), toQString(config_.model_id)); result.insert(QStringLiteral("fcitx_registers_modernime"), addon.type() == QDBusMessage::ReplyMessage && !addon.arguments().empty() && addon.arguments().front().toString() == QStringLiteral("modernime")); result.insert(QStringLiteral("profile_contains_modernime"), profileContainsModernIme);
+    const auto selectedModelDirectory = pathString(paths_.data / "models" / config_.model_id);
+    const bool selectedModelAvailable = loadVoiceModelSpec(selectedModelDirectory).has_value();
+    QJsonObject workerStatus;
+    if (voice_worker_.state() != QProcess::NotRunning) {
+        QDBusInterface worker(QStringLiteral("org.modernime.VoiceWorker1"), QStringLiteral("/org/modernime/VoiceWorker1"), QStringLiteral("org.modernime.VoiceWorker1"));
+        worker.setTimeout(250);
+        const auto workerReply = worker.call(QStringLiteral("Status"));
+        if (workerReply.type() == QDBusMessage::ReplyMessage && !workerReply.arguments().empty()) workerStatus = QJsonDocument::fromJson(workerReply.arguments().front().toString().toUtf8()).object();
+    }
+    QJsonObject result; result.insert(QStringLiteral("protocol_version"), static_cast<int>(kProtocolVersion)); result.insert(QStringLiteral("service_pid"), QCoreApplication::applicationPid()); result.insert(QStringLiteral("config_path"), pathString(config)); result.insert(QStringLiteral("data_path"), pathString(data)); result.insert(QStringLiteral("state_path"), pathString(state)); result.insert(QStringLiteral("lexicon_healthy"), language_.lexicon().healthy()); result.insert(QStringLiteral("lexicon_error"), toQString(language_.lexicon().lastError())); result.insert(QStringLiteral("voice_worker_running"), voice_worker_.state() != QProcess::NotRunning); result.insert(QStringLiteral("voice_worker"), workerStatus); result.insert(QStringLiteral("selected_microphone"), toQString(config_.microphone)); result.insert(QStringLiteral("selected_microphone_available"), selectedMicrophoneAvailable()); result.insert(QStringLiteral("model_id"), toQString(config_.model_id)); result.insert(QStringLiteral("selected_model_available"), selectedModelAvailable); result.insert(QStringLiteral("fcitx_registers_modernime"), addon.type() == QDBusMessage::ReplyMessage && !addon.arguments().empty() && addon.arguments().front().toString() == QStringLiteral("modernime")); result.insert(QStringLiteral("profile_contains_modernime"), profileContainsModernIme);
     return QJsonDocument(result).toJson(QJsonDocument::Compact);
 }
 QString Service::ListMicrophones() { return QJsonDocument(microphoneSources()).toJson(QJsonDocument::Compact); }
+QString Service::ListVoiceModels() {
+    QJsonArray models;
+    QDir root(pathString(paths_.data / "models"));
+    for (const auto &directory : root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+        QString error;
+        const auto spec = loadVoiceModelSpec(directory.absoluteFilePath(), &error);
+        if (!spec) continue;
+        QString label = spec->id;
+        QString description = QStringLiteral("本地语音模型");
+        if (spec->id == QString::fromLatin1(kDefaultVoiceModel)) {
+            label = QStringLiteral("普通话优先（推荐）");
+            description = QStringLiteral("2025 中文模型；短词、专名和普通话准确率优先；权重许可待发布审查");
+        } else if (spec->id == QString::fromLatin1(kLegacyBilingualVoiceModel)) {
+            label = QStringLiteral("中英混输（兼容）");
+            description = QStringLiteral("2023 中英模型；英文更好，中文准确率较低");
+        }
+        models.append(QJsonObject{{QStringLiteral("id"), spec->id},
+                                  {QStringLiteral("label"), label},
+                                  {QStringLiteral("description"), description},
+                                  {QStringLiteral("license"), spec->license},
+                                  {QStringLiteral("source"), spec->source},
+                                  {QStringLiteral("supports_hotwords"), spec->supports_hotwords},
+                                  {QStringLiteral("selected"), spec->id == toQString(config_.model_id)}});
+    }
+    return QJsonDocument(models).toJson(QJsonDocument::Compact);
+}
 bool Service::RepairFcitx() {
     const auto profilePath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QStringLiteral("/fcitx5/profile");
     QDBusInterface controller(QStringLiteral("org.fcitx.Fcitx5"), QStringLiteral("/controller"), QStringLiteral("org.fcitx.Fcitx.Controller1"));
@@ -243,6 +336,72 @@ bool Service::ensureVoiceWorker() {
     logError("service", "voice worker did not acquire its D-Bus name");
     return false;
 }
+void Service::prewarmVoiceWorker() {
+    if (config_.microphone.empty() || !ensureVoiceWorker()) return;
+    QDBusInterface worker(QStringLiteral("org.modernime.VoiceWorker1"), QStringLiteral("/org/modernime/VoiceWorker1"), QStringLiteral("org.modernime.VoiceWorker1"));
+    worker.setTimeout(5'000);
+    worker.asyncCall(QStringLiteral("Warmup"));
+}
+void Service::refreshVoiceHotwords() {
+    QSaveFile file(pathString(paths_.data / "voice-hotwords.txt"));
+    if (!file.open(QIODevice::WriteOnly)) {
+        logError("voice", "unable to update voice hotwords");
+        return;
+    }
+    constexpr qsizetype kMaximumHotwords = 256;
+    const auto lexemes = language_.lexicon().list();
+    QSet<QString> supportedTokens;
+    const auto selectedModel = loadVoiceModelSpec(pathString(paths_.data / "models" / config_.model_id));
+    const bool validateCharacters = selectedModel && selectedModel->modeling_unit == QStringLiteral("cjkchar");
+    if (validateCharacters) {
+        QFile tokens(selectedModel->tokens);
+        if (tokens.open(QIODevice::ReadOnly)) {
+            while (!tokens.atEnd()) {
+                const auto line = QString::fromUtf8(tokens.readLine()).trimmed();
+                const auto separator = line.lastIndexOf(QLatin1Char(' '));
+                if (separator > 0) supportedTokens.insert(line.first(separator));
+            }
+        }
+    }
+    QSet<QString> written;
+    const auto append = [&](const Lexeme &lexeme) {
+        if (written.size() >= kMaximumHotwords) return;
+        const auto hotword = voiceHotwordForLexeme(lexeme);
+        if (!hotword || written.contains(hotword->phrase)) return;
+        if (validateCharacters) {
+            const auto characters = hotword->phrase.toUcs4();
+            if (std::any_of(characters.cbegin(), characters.cend(), [&supportedTokens](char32_t character) {
+                    if (QChar::isSpace(character)) return false;
+                    return !supportedTokens.contains(QString::fromUcs4(&character, 1));
+                })) return;
+        }
+        file.write(hotword->phrase.toUtf8());
+        if (hotword->score > 0.0F) file.write(QStringLiteral(" :%1").arg(hotword->score, 0, 'f', 1).toUtf8());
+        file.write("\n");
+        written.insert(hotword->phrase);
+    };
+    // Curated words must never be displaced by a large learned history.
+    for (const auto &lexeme : lexemes) {
+        if (lexeme.pinned || lexeme.kind == "manual" || lexeme.kind == "replacement") append(lexeme);
+    }
+    for (const auto &lexeme : lexemes) {
+        if (!lexeme.pinned && lexeme.kind == "learned") append(lexeme);
+    }
+    if (!file.commit()) logError("voice", "unable to commit voice hotwords");
+}
+void Service::restartVoiceWorkerForModelConfig() {
+    voice_hotword_refresh_timer_.stop();
+    if (voice_worker_.state() != QProcess::NotRunning) {
+        voice_worker_.terminate();
+        if (!voice_worker_.waitForFinished(750)) {
+            voice_worker_.kill();
+            voice_worker_.waitForFinished(750);
+        }
+    }
+    voice_worker_source_.clear();
+    voice_worker_model_.clear();
+    QTimer::singleShot(0, this, &Service::prewarmVoiceWorker);
+}
 bool Service::selectedMicrophoneAvailable() const { return sourceAppearsAvailable(toQString(config_.microphone)); }
 void Service::publishVoiceEvent(const VoiceEvent &event) {
     const auto serialized = toQString(serialize(event));
@@ -270,16 +429,17 @@ bool Service::StartVoice(const QString &sessionId, qulonglong focusGeneration) {
         return false;
     }
     QDBusInterface worker(QStringLiteral("org.modernime.VoiceWorker1"), QStringLiteral("/org/modernime/VoiceWorker1"), QStringLiteral("org.modernime.VoiceWorker1"));
+    worker.setTimeout(5'000);
     const auto reply = worker.call(QStringLiteral("Start"), sessionId, focusGeneration);
     const bool started = reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().empty() && reply.arguments().front().toBool();
     if (!started) microphoneError();
     return started;
 }
-bool Service::StopVoice(const QString &sessionId) { QDBusInterface worker(QStringLiteral("org.modernime.VoiceWorker1"), QStringLiteral("/org/modernime/VoiceWorker1"), QStringLiteral("org.modernime.VoiceWorker1")); const auto reply = worker.call(QStringLiteral("Stop"), sessionId); return reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().empty() && reply.arguments().front().toBool(); }
-bool Service::CancelVoice(const QString &sessionId) { QDBusInterface worker(QStringLiteral("org.modernime.VoiceWorker1"), QStringLiteral("/org/modernime/VoiceWorker1"), QStringLiteral("org.modernime.VoiceWorker1")); const auto reply = worker.call(QStringLiteral("Cancel"), sessionId); return reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().empty() && reply.arguments().front().toBool(); }
+bool Service::StopVoice(const QString &sessionId) { QDBusInterface worker(QStringLiteral("org.modernime.VoiceWorker1"), QStringLiteral("/org/modernime/VoiceWorker1"), QStringLiteral("org.modernime.VoiceWorker1")); worker.setTimeout(5'000); const auto reply = worker.call(QStringLiteral("Stop"), sessionId); return reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().empty() && reply.arguments().front().toBool(); }
+bool Service::CancelVoice(const QString &sessionId) { QDBusInterface worker(QStringLiteral("org.modernime.VoiceWorker1"), QStringLiteral("/org/modernime/VoiceWorker1"), QStringLiteral("org.modernime.VoiceWorker1")); worker.setTimeout(3'500); const auto reply = worker.call(QStringLiteral("Cancel"), sessionId); return reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().empty() && reply.arguments().front().toBool(); }
 QString Service::GetVoiceResult(const QString &sessionId) { return voice_results_.value(sessionId); }
 void Service::Shutdown() { QCoreApplication::quit(); }
-void Service::onVoiceWorkerFinished(int exitCode, QProcess::ExitStatus status) { logError("service", "voice worker exited: " + std::to_string(exitCode) + (status == QProcess::CrashExit ? " crash" : "")); }
+void Service::onVoiceWorkerFinished(int exitCode, QProcess::ExitStatus status) { const auto message = "voice worker exited: " + std::to_string(exitCode) + (status == QProcess::CrashExit ? " crash" : ""); if (status == QProcess::CrashExit) logError("service", message); else logInfo("service", message); if (status == QProcess::CrashExit && !config_.microphone.empty()) QTimer::singleShot(1'000, this, &Service::prewarmVoiceWorker); }
 void Service::onVoiceEvent(const QString &serialized) {
     const auto event = parseVoiceEvent(toString(serialized));
     if (!event) return;

@@ -40,7 +40,14 @@ CTest 当前包含：
 - Xvfb/xcb 候选窗层级和无焦点 smoke test。
 - 键盘候选 P95 延迟门槛。
 
-`modern-ime-asr-smoke` 需要已安装模型，用于固定音频的离线识别检查，不属于默认 CTest。
+`modern-ime-asr-smoke` 需要已安装模型，用于固定音频的离线识别、标点、RTF 和 CER 检查，不属于默认 CTest。示例：
+
+```bash
+modern-ime-asr-smoke --wav sample.wav --expected '参考文本' --max-cer 0.15 --json
+modern-ime-asr-smoke --wav sample.wav --hotwords ~/.local/share/modern-ime/voice-hotwords.txt --json
+```
+
+测试语料必须由用户明确授权录制；运行时不会保存麦克风音频。推广前的语音发布门槛应包含：首句不丢、短词/长句、静音、背景噪声、蓝牙重连、连续 100 次会话、CER 和 RTF。
 
 ## 安装
 
@@ -48,7 +55,7 @@ CTest 当前包含：
 ./tools/install-user.sh build-release
 ```
 
-脚本会重新构建和测试、备份现有部署文件、安装用户程序和 systemd user service，并下载经过 SHA-256 校验的 sherpa-onnx 1.13.2 与中英双语 Zipformer 模型。设置 `MODERN_IME_SKIP_MODEL=1` 可跳过模型下载。
+脚本会重新构建和测试、备份现有部署文件、安装用户程序和 systemd user service，并下载经过 SHA-256 校验的 sherpa-onnx 1.13.2、2025 普通话 Zipformer、Silero VAD 和中英标点模型。设置 `MODERN_IME_SKIP_MODEL=1` 可跳过模型下载。模型布局由各目录的 `model.json` 声明并限制为目录内文件，避免在 worker 中继续硬编码文件名。
 
 当前 Fcitx5 从系统 ABI 目录加载插件，因此脚本需要 `sudo -n` 安装 `libmodernime.so` 和 `libmodernimeui.so`。后续应改为发行包或验证可靠的纯用户插件发现方式。
 

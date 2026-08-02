@@ -13,6 +13,7 @@
     <method name="ImportLexicon"><arg name="serialized" type="s" direction="in"/><arg name="success" type="b" direction="out"/></method>
     <method name="Diagnostics"><arg name="serialized" type="s" direction="out"/></method>
     <method name="ListMicrophones"><arg name="serialized" type="s" direction="out"/></method>
+    <method name="ListVoiceModels"><arg name="serialized" type="s" direction="out"/></method>
     <method name="RepairFcitx"><arg name="success" type="b" direction="out"/></method>
     <method name="StartVoice"><arg name="session_id" type="s" direction="in"/><arg name="focus_generation" type="t" direction="in"/><arg name="success" type="b" direction="out"/></method>
     <method name="StopVoice"><arg name="session_id" type="s" direction="in"/><arg name="success" type="b" direction="out"/></method>
