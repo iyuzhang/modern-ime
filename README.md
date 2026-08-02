@@ -9,7 +9,7 @@ Modern IME 是一个面向 Fcitx5 的实验性本地输入法，将全拼、英�
 - libime 全拼候选、英文原文候选和 SQLite 个人词库。
 - `Space`、数字键、方向键、翻页、`Enter` 和 `Esc` 等基本输入操作。
 - 独立 Qt Quick 候选窗，支持 150% 缩放定位、无焦点置顶和引擎重启恢复。
-- 候选窗提供午夜蓝、极光绿、云雾白和墨韵四套主题，可调整字号、圆角和背景不透明度。
+- 候选窗提供午夜蓝、极光绿、云雾白、墨韵和带原创动态角色的星愿少女主题，可调整字号、圆角和背景不透明度。
 - F8 按住说话、PipeWire 采集、sherpa-onnx 中英双语离线识别和松开提交。
 - 设置界面、麦克风选择、快捷键设置、词库导入导出和 Fcitx 配置修复。
 - 单元测试、候选窗 offscreen/X11 smoke test 和键盘候选延迟测试。
@@ -26,11 +26,15 @@ Modern IME 是一个面向 Fcitx5 的实验性本地输入法，将全拼、英�
 
 ### 拼音候选
 
-![拼音候选窗](example.jpg)
+![拼音候选窗](docs/images/pinyin-candidates.jpg)
+
+### 星愿少女主题
+
+![星愿少女主题候选窗](docs/images/starlight-theme.jpg)
 
 ### 语音识别
 
-![语音识别候选窗](asr-example.jpg)
+![语音识别候选窗](docs/images/voice-recognition.jpg)
 
 ## 构建和安装
 

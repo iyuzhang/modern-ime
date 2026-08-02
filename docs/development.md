@@ -67,10 +67,12 @@ journalctl --user -u modern-ime-service.service -u modern-ime-ui.service -b
 
 ## 候选窗主题
 
-- `ConfigSnapshot::theme` 是持久化主题字段；有效值为 `midnight`、`aurora`、`cloud`、`ink`。缺失或未知值回落到 `midnight`，以保持旧配置的原有外观。
+- `ConfigSnapshot::theme` 是持久化主题字段；有效值为 `midnight`、`aurora`、`cloud`、`ink`、`starlight`。缺失或未知值回落到 `midnight`，以保持旧配置的原有外观。
 - 设置页将主题和 `font_size`、`corner_radius`、`opacity` 通过 `UpdateConfig` 保存。Service 发出 `ConfigChanged` 后，候选窗的 `CandidateController::ApplyConfig` 立即更新外观；候选窗启动时通过 `GetConfig` 读取当前配置。
 - `CandidateWindow.qml` 定义候选窗实际色板；`SettingsWindow.qml` 定义选择卡的预览色板。新增主题时，两处色值必须同步，并在 `CandidateTheme`、序列化/解析和主题单元测试中加入该主题。
 - 字号会影响候选窗宽度和高度计算。修改文字尺寸、内边距或候选结构后，运行 offscreen 与 xcb 候选窗 smoke test。
+- `starlight` 使用 `assets/themes/anime-mascot.png`。该资源以 `themes/anime-mascot.png` 别名同时加入候选窗与设置页的 QRC；候选窗为角色预留 66 px 宽度，并将角色画布向背景框上方扩展 36 px。定位以背景框顶边为准，普通候选状态播放漂浮和摆动，语音“聆听中”播放呼吸缩放。
+- `anime-mascot.png` 是本项目的原创角色素材：本地保存的是经背景移除后的最终 PNG，不依赖第三方主题角色或在线资源。
 
 ## 调试守则
 

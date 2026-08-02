@@ -17,6 +17,7 @@ QString themeName(CandidateTheme value) {
     case CandidateTheme::Aurora: return QStringLiteral("aurora");
     case CandidateTheme::Cloud: return QStringLiteral("cloud");
     case CandidateTheme::Ink: return QStringLiteral("ink");
+    case CandidateTheme::Starlight: return QStringLiteral("starlight");
     default: return QStringLiteral("midnight");
     }
 }
@@ -24,6 +25,7 @@ CandidateTheme parseTheme(const QString &value) {
     if (value == QStringLiteral("aurora")) return CandidateTheme::Aurora;
     if (value == QStringLiteral("cloud")) return CandidateTheme::Cloud;
     if (value == QStringLiteral("ink")) return CandidateTheme::Ink;
+    if (value == QStringLiteral("starlight")) return CandidateTheme::Starlight;
     return CandidateTheme::Midnight;
 }
 QString triggerName(VoiceTriggerMode value) { return value == VoiceTriggerMode::Toggle ? QStringLiteral("toggle") : QStringLiteral("push_to_talk"); }

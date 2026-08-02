@@ -17,6 +17,7 @@ class CandidateController final : public QObject {
     Q_PROPERTY(QString pageIndicator READ pageIndicator NOTIFY changed)
     Q_PROPERTY(int windowWidth READ windowWidth NOTIFY changed)
     Q_PROPERTY(int windowHeight READ windowHeight NOTIFY changed)
+    Q_PROPERTY(int candidateHeight READ candidateHeight NOTIFY changed)
     Q_PROPERTY(bool vertical READ vertical NOTIFY changed)
     Q_PROPERTY(QString theme READ theme NOTIFY changed)
     Q_PROPERTY(int fontSize READ fontSize NOTIFY changed)
@@ -26,7 +27,7 @@ class CandidateController final : public QObject {
     Q_PROPERTY(int windowY READ windowY NOTIFY changed)
 public:
     explicit CandidateController(QObject *parent = nullptr);
-    bool visible() const; QString preedit() const; QString mode() const; QVariantList candidates() const; int selected() const; QString pageIndicator() const; int windowWidth() const; int windowHeight() const; bool vertical() const; QString theme() const; int fontSize() const; int cornerRadius() const; int backgroundOpacity() const; int windowX() const; int windowY() const;
+    bool visible() const; QString preedit() const; QString mode() const; QVariantList candidates() const; int selected() const; QString pageIndicator() const; int windowWidth() const; int windowHeight() const; int candidateHeight() const; bool vertical() const; QString theme() const; int fontSize() const; int cornerRadius() const; int backgroundOpacity() const; int windowX() const; int windowY() const;
 public slots:
     void ShowSnapshot(const QString &serialized);
     void Hide();

@@ -14,7 +14,8 @@ Rectangle {
         { id: "midnight", name: "午夜蓝", subtitle: "当前默认", background: "#1a1f29", border: "#51627b", accent: "#8ab4f8", preedit: "#b8c2d1", text: "#ffffff", muted: "#91a4ba" },
         { id: "aurora", name: "极光绿", subtitle: "清透、低调", background: "#102728", border: "#5c9ee8", accent: "#78e7c0", preedit: "#c7eee1", text: "#ffffff", muted: "#93bdb1" },
         { id: "cloud", name: "云雾白", subtitle: "明亮、专注", background: "#f7f9fc", border: "#cbd5e1", accent: "#2563a9", preedit: "#475569", text: "#0f172a", muted: "#64748b" },
-        { id: "ink", name: "墨韵", subtitle: "温暖、沉静", background: "#261f1d", border: "#73594d", accent: "#d9aa6c", preedit: "#e2c7a7", text: "#fff8ed", muted: "#b49b86" }
+        { id: "ink", name: "墨韵", subtitle: "温暖、沉静", background: "#261f1d", border: "#73594d", accent: "#d9aa6c", preedit: "#e2c7a7", text: "#fff8ed", muted: "#b49b86" },
+        { id: "starlight", name: "星愿少女", subtitle: "原创动态角色", background: "#fff7f4", border: "#e8a0b3", accent: "#c65373", preedit: "#765161", text: "#961f49", muted: "#ad7d8c" }
     ]
 
     component DarkButton: Button {
@@ -366,6 +367,18 @@ Rectangle {
                                             Text { text: "nihao"; color: themeCard.themeData.preedit; font.pixelSize: 12 }
                                             Text { text: "1"; color: themeCard.themeData.muted; font.pixelSize: 12 }
                                             Text { text: "你好"; color: themeCard.themeData.text; font.pixelSize: 15; font.bold: true }
+                                        }
+                                        Image {
+                                            visible: themeCard.themeData.id === "starlight"
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 8
+                                            anchors.bottom: parent.bottom
+                                            width: 38
+                                            height: 48
+                                            source: "qrc:/themes/anime-mascot.png"
+                                            sourceClipRect: Qt.rect(300, 70, 650, 1100)
+                                            fillMode: Image.PreserveAspectFit
+                                            smooth: true
                                         }
                                     }
                                 }

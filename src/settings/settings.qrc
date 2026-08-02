@@ -1,1 +1,1 @@
-<RCC><qresource prefix="/"><file>qml/SettingsWindow.qml</file></qresource></RCC>
+<RCC><qresource prefix="/"><file>qml/SettingsWindow.qml</file><file alias="themes/anime-mascot.png">../../assets/themes/anime-mascot.png</file></qresource></RCC>

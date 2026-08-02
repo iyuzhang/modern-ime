@@ -42,7 +42,10 @@ QVariantList CandidateController::candidates() const {
 }
 int CandidateController::selected() const { return snapshot_.selected; }
 QString CandidateController::pageIndicator() const { return snapshot_.pages > 1 ? QStringLiteral("%1/%2").arg(snapshot_.page).arg(snapshot_.pages) : QString{}; }
-int CandidateController::windowHeight() const { return std::max(52, appearance_.font_size + 36); }
+int CandidateController::windowHeight() const {
+    return candidateHeight() + (appearance_.theme == CandidateTheme::Starlight ? 36 : 0);
+}
+int CandidateController::candidateHeight() const { return std::max(52, appearance_.font_size + 36); }
 int CandidateController::windowWidth() const {
     if (vertical()) return 420;
     const auto textWidth = [](const QString &text, int pixelSize, bool bold = false) {
@@ -78,7 +81,8 @@ int CandidateController::windowWidth() const {
     // Extra breathing room covers font fallback differences between the Qt
     // metrics and the QML renderer, preventing the trailing Esc hint from
     // being cut off on CJK fonts.
-    return std::clamp(width + 24, 240, 1'280);
+    const int mascotWidth = appearance_.theme == CandidateTheme::Starlight ? 66 : 0;
+    return std::clamp(width + 24 + mascotWidth, 240, 1'280);
 }
 bool CandidateController::vertical() const { return snapshot_.layout == CandidateLayout::Vertical; }
 QString CandidateController::theme() const {
@@ -86,6 +90,7 @@ QString CandidateController::theme() const {
     case CandidateTheme::Aurora: return QStringLiteral("aurora");
     case CandidateTheme::Cloud: return QStringLiteral("cloud");
     case CandidateTheme::Ink: return QStringLiteral("ink");
+    case CandidateTheme::Starlight: return QStringLiteral("starlight");
     default: return QStringLiteral("midnight");
     }
 }
@@ -175,6 +180,8 @@ void CandidateController::position() {
     const auto geometry = screen->availableGeometry();
     const int width = windowWidth();
     const int height = windowHeight();
+    const int candidateHeight = this->candidateHeight();
+    const int topInset = height - candidateHeight;
     constexpr int margin = 16;
     if (cursor.position.x() < 0) {
         x_ = geometry.center().x() - width / 2;
@@ -183,8 +190,8 @@ void CandidateController::position() {
     }
     x_ = std::clamp(cursor.position.x(), geometry.left() + margin, geometry.right() - width - margin);
     const int below = cursor.position.y() + std::max(cursor.height, 24) + margin;
-    y_ = below + height <= geometry.bottom() - margin
-             ? below
+    y_ = below + candidateHeight <= geometry.bottom() - margin
+             ? std::max(geometry.top() + margin, below - topInset)
              : std::max(geometry.top() + margin, cursor.position.y() - height - margin);
 }
 void CandidateController::ShowSnapshot(const QString &serialized) {
@@ -235,6 +242,7 @@ QString CandidateController::Status() const {
     value.insert(QStringLiteral("background_opacity"), backgroundOpacity());
     value.insert(QStringLiteral("window_width"), windowWidth());
     value.insert(QStringLiteral("window_height"), windowHeight());
+    value.insert(QStringLiteral("candidate_height"), candidateHeight());
     value.insert(QStringLiteral("voice_state"), QString::fromStdString(voiceStateName(voice_.state)));
     if (voice_.error) value.insert(QStringLiteral("voice_error"), QString::fromStdString(errorCodeName(*voice_.error)));
     value.insert(QStringLiteral("x"), x_);
