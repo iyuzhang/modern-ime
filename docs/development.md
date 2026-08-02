@@ -1,0 +1,75 @@
+# 开发、测试和部署
+
+## 基线环境
+
+当前已验证环境：Ubuntu 24.04 x86_64、KDE Plasma 5.27、X11、Fcitx5 5.1.7、Qt 6.4、libime 1.1、PipeWire 1.0、CMake 3.28 和 GCC 13。
+
+Ubuntu 开发依赖：
+
+```bash
+sudo apt install cmake ninja-build g++ pkg-config catch2 xvfb \
+  qt6-base-dev qt6-declarative-dev \
+  qml6-module-qtquick-controls qml6-module-qtqml-workerscript \
+  qml6-module-qtquick-layouts qml6-module-qtquick-templates \
+  qml6-module-qtquick-window \
+  libfcitx5core-dev libfcitx5config-dev libfcitx5utils-dev \
+  libimecore-dev libimepinyin-dev libpipewire-0.3-dev
+```
+
+## 构建与最低检查
+
+```bash
+cmake -S . -B build-debug -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DMODERN_IME_WARNINGS_AS_ERRORS=ON
+cmake --build build-debug --parallel
+ctest --test-dir build-debug --output-on-failure
+
+cmake -S . -B build-release -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DMODERN_IME_WARNINGS_AS_ERRORS=ON
+cmake --build build-release --parallel
+ctest --test-dir build-release --output-on-failure
+git diff --check
+```
+
+CTest 当前包含：
+
+- 核心候选、词库和契约单元测试。
+- offscreen Qt + 150% 缩放的候选窗 smoke test。
+- Xvfb/xcb 候选窗层级和无焦点 smoke test。
+- 键盘候选 P95 延迟门槛。
+
+`modern-ime-asr-smoke` 需要已安装模型，用于固定音频的离线识别检查，不属于默认 CTest。
+
+## 安装
+
+```bash
+./tools/install-user.sh build-release
+```
+
+脚本会重新构建和测试、备份现有部署文件、安装用户程序和 systemd user service，并下载经过 SHA-256 校验的 sherpa-onnx 1.13.2 与中英双语 Zipformer 模型。设置 `MODERN_IME_SKIP_MODEL=1` 可跳过模型下载。
+
+当前 Fcitx5 从系统 ABI 目录加载插件，因此脚本需要 `sudo -n` 安装 `libmodernime.so` 和 `libmodernimeui.so`。后续应改为发行包或验证可靠的纯用户插件发现方式。
+
+常用运行态检查：
+
+```bash
+systemctl --user status modern-ime-service.service modern-ime-ui.service
+gdbus call --session \
+  --dest org.modernime.Service1 \
+  --object-path /org/modernime/Service1 \
+  --method org.modernime.Service1.Diagnostics
+journalctl --user -u modern-ime-service.service -u modern-ime-ui.service -b
+```
+
+改动引擎后必须重新安装系统 ABI 目录中的插件并重启 Fcitx；只改候选 UI 或 Service 时只需安装对应用户程序并重启相应 user service。
+
+## 调试守则
+
+- 不向真实桌面的候选 UI 注入测试快照，也不向用户正在输入的应用注入按键；使用私有 D-Bus 和 Xvfb。
+- 部署前保留当前二进制与 Fcitx profile，避免用旧构建覆盖源码基线。
+- 模型、运行时、用户配置、数据库、音频和日志不得提交到仓库。
+- 修改 D-Bus contract 时同步修改序列化测试和调用方。
+- 修改候选窗口定位、层级或大小时，同时运行 offscreen 和 xcb smoke test。
+- 修改 F8 状态机时覆盖 press、真实 release、自动重复、取消、焦点切换和服务重启。

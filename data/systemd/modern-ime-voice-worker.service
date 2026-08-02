@@ -1,0 +1,8 @@
+[Unit]
+Description=Modern IME voice worker template metadata
+After=modern-ime-service.service pipewire.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/modern-ime-voice-worker --source alsa_input.pci-0000_00_1f.3.analog-stereo
+RemainAfterExit=no

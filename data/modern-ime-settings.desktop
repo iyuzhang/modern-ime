@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Modern IME
+Name[zh_CN]=Modern 输入法
+Comment=Configure Modern IME
+Comment[zh_CN]=配置 Modern 输入法
+Exec=modern-ime-settings
+Icon=fcitx-pinyin
+Categories=Settings;Utility;
+Terminal=false

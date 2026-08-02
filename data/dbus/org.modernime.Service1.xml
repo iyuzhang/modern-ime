@@ -1,0 +1,24 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.modernime.Service1">
+    <method name="GetConfig"><arg name="serialized" type="s" direction="out"/></method>
+    <method name="UpdateConfig"><arg name="serialized" type="s" direction="in"/><arg name="success" type="b" direction="out"/></method>
+    <method name="ListLexemes"><arg name="query" type="s" direction="in"/><arg name="serialized" type="s" direction="out"/></method>
+    <method name="UpsertLexeme"><arg name="serialized" type="s" direction="in"/><arg name="result" type="s" direction="out"/></method>
+    <method name="DeleteLexeme"><arg name="id" type="x" direction="in"/><arg name="success" type="b" direction="out"/></method>
+    <method name="ClearLearned"><arg name="success" type="b" direction="out"/></method>
+    <method name="RecordSelection"><arg name="reading" type="s" direction="in"/><arg name="output" type="s" direction="in"/><arg name="success" type="b" direction="out"/></method>
+    <method name="ExportLexicon"><arg name="serialized" type="s" direction="out"/></method>
+    <method name="ImportLexicon"><arg name="serialized" type="s" direction="in"/><arg name="success" type="b" direction="out"/></method>
+    <method name="Diagnostics"><arg name="serialized" type="s" direction="out"/></method>
+    <method name="ListMicrophones"><arg name="serialized" type="s" direction="out"/></method>
+    <method name="RepairFcitx"><arg name="success" type="b" direction="out"/></method>
+    <method name="StartVoice"><arg name="session_id" type="s" direction="in"/><arg name="focus_generation" type="t" direction="in"/><arg name="success" type="b" direction="out"/></method>
+    <method name="StopVoice"><arg name="session_id" type="s" direction="in"/><arg name="success" type="b" direction="out"/></method>
+    <method name="CancelVoice"><arg name="session_id" type="s" direction="in"/><arg name="success" type="b" direction="out"/></method>
+    <method name="GetVoiceResult"><arg name="session_id" type="s" direction="in"/><arg name="serialized" type="s" direction="out"/></method>
+    <signal name="ConfigChanged"><arg name="version" type="t"/><arg name="serialized" type="s"/></signal>
+    <signal name="VoiceUpdated"><arg name="serialized" type="s"/></signal>
+  </interface>
+</node>
