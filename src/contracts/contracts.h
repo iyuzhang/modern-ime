@@ -28,7 +28,20 @@ enum class ErrorCode {
 enum class VoiceState { Idle, Starting, Listening, Finalizing, Review, Committing, Error };
 enum class VoiceTriggerMode { PushToTalk, Toggle };
 enum class CandidateLayout { Horizontal, Vertical };
-enum class CandidateTheme { Midnight, Aurora, Cloud, Ink, Starlight };
+enum class CandidateTheme {
+    Midnight,
+    Aurora,
+    Cloud,
+    Ink,
+    Starlight,
+    Sakura,
+    Matcha,
+    Lavender,
+    PeachSoda,
+    MoonRabbit,
+    MintCat,
+    BerryBear,
+};
 
 struct Candidate {
     std::string text;

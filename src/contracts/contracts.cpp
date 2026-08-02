@@ -18,6 +18,13 @@ QString themeName(CandidateTheme value) {
     case CandidateTheme::Cloud: return QStringLiteral("cloud");
     case CandidateTheme::Ink: return QStringLiteral("ink");
     case CandidateTheme::Starlight: return QStringLiteral("starlight");
+    case CandidateTheme::Sakura: return QStringLiteral("sakura");
+    case CandidateTheme::Matcha: return QStringLiteral("matcha");
+    case CandidateTheme::Lavender: return QStringLiteral("lavender");
+    case CandidateTheme::PeachSoda: return QStringLiteral("peach-soda");
+    case CandidateTheme::MoonRabbit: return QStringLiteral("moon-rabbit");
+    case CandidateTheme::MintCat: return QStringLiteral("mint-cat");
+    case CandidateTheme::BerryBear: return QStringLiteral("berry-bear");
     default: return QStringLiteral("midnight");
     }
 }
@@ -26,6 +33,13 @@ CandidateTheme parseTheme(const QString &value) {
     if (value == QStringLiteral("cloud")) return CandidateTheme::Cloud;
     if (value == QStringLiteral("ink")) return CandidateTheme::Ink;
     if (value == QStringLiteral("starlight")) return CandidateTheme::Starlight;
+    if (value == QStringLiteral("sakura")) return CandidateTheme::Sakura;
+    if (value == QStringLiteral("matcha")) return CandidateTheme::Matcha;
+    if (value == QStringLiteral("lavender")) return CandidateTheme::Lavender;
+    if (value == QStringLiteral("peach-soda")) return CandidateTheme::PeachSoda;
+    if (value == QStringLiteral("moon-rabbit")) return CandidateTheme::MoonRabbit;
+    if (value == QStringLiteral("mint-cat")) return CandidateTheme::MintCat;
+    if (value == QStringLiteral("berry-bear")) return CandidateTheme::BerryBear;
     return CandidateTheme::Midnight;
 }
 QString triggerName(VoiceTriggerMode value) { return value == VoiceTriggerMode::Toggle ? QStringLiteral("toggle") : QStringLiteral("push_to_talk"); }

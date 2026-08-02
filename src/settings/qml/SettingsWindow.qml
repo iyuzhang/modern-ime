@@ -11,11 +11,18 @@ Rectangle {
     property string captureField: ""
     property string captureMessage: ""
     property var candidateThemes: [
-        { id: "midnight", name: "午夜蓝", subtitle: "当前默认", background: "#1a1f29", border: "#51627b", accent: "#8ab4f8", preedit: "#b8c2d1", text: "#ffffff", muted: "#91a4ba" },
-        { id: "aurora", name: "极光绿", subtitle: "清透、低调", background: "#102728", border: "#5c9ee8", accent: "#78e7c0", preedit: "#c7eee1", text: "#ffffff", muted: "#93bdb1" },
-        { id: "cloud", name: "云雾白", subtitle: "明亮、专注", background: "#f7f9fc", border: "#cbd5e1", accent: "#2563a9", preedit: "#475569", text: "#0f172a", muted: "#64748b" },
-        { id: "ink", name: "墨韵", subtitle: "温暖、沉静", background: "#261f1d", border: "#73594d", accent: "#d9aa6c", preedit: "#e2c7a7", text: "#fff8ed", muted: "#b49b86" },
-        { id: "starlight", name: "星愿少女", subtitle: "原创动态角色", background: "#fff7f4", border: "#e8a0b3", accent: "#c65373", preedit: "#765161", text: "#961f49", muted: "#ad7d8c" }
+        { id: "midnight", name: "午夜蓝", subtitle: "当前默认", background: "#1a1f29", border: "#51627b", accent: "#8ab4f8", preedit: "#b8c2d1", text: "#ffffff", muted: "#91a4ba", motif: "", mascot: "" },
+        { id: "aurora", name: "极光绿", subtitle: "清透、低调", background: "#102728", border: "#5c9ee8", accent: "#78e7c0", preedit: "#c7eee1", text: "#ffffff", muted: "#93bdb1", motif: "", mascot: "" },
+        { id: "cloud", name: "云雾白", subtitle: "明亮、专注", background: "#f7f9fc", border: "#cbd5e1", accent: "#2563a9", preedit: "#475569", text: "#0f172a", muted: "#64748b", motif: "", mascot: "" },
+        { id: "ink", name: "墨韵", subtitle: "温暖、沉静", background: "#261f1d", border: "#73594d", accent: "#d9aa6c", preedit: "#e2c7a7", text: "#fff8ed", muted: "#b49b86", motif: "", mascot: "" },
+        { id: "starlight", name: "星愿少女", subtitle: "原创动态角色", background: "#fff7f4", border: "#e8a0b3", accent: "#c65373", preedit: "#765161", text: "#961f49", muted: "#ad7d8c", motif: "✦", mascot: "anime-mascot.png" },
+        { id: "sakura", name: "樱花奶霜", subtitle: "柔粉、甜美", background: "#fff5f8", border: "#efb6c8", accent: "#d85e83", preedit: "#9f6277", text: "#c83f68", muted: "#b87b92", motif: "✿", mascot: "" },
+        { id: "matcha", name: "抹茶团子", subtitle: "清新、软糯", background: "#f4f9ed", border: "#b8d597", accent: "#5f9258", preedit: "#668060", text: "#356a45", muted: "#8ca984", motif: "●●●", mascot: "" },
+        { id: "lavender", name: "葡萄苏打", subtitle: "梦幻、轻盈", background: "#f8f5ff", border: "#cbbcf3", accent: "#8169d1", preedit: "#766b9d", text: "#6047aa", muted: "#998cbe", motif: "✦", mascot: "" },
+        { id: "peach-soda", name: "蜜桃汽水", subtitle: "透亮、元气", background: "#f1fbff", border: "#a9ddeb", accent: "#319bc6", preedit: "#537d91", text: "#176f99", muted: "#79a6b9", motif: "♡", mascot: "" },
+        { id: "moon-rabbit", name: "月兔少女", subtitle: "大图标·月光", background: "#f9f6ff", border: "#d9c8f5", accent: "#8d6fca", preedit: "#76658e", text: "#5e4798", muted: "#a398b7", motif: "", mascot: "lunar-rabbit-mascot.png" },
+        { id: "mint-cat", name: "薄荷猫咪", subtitle: "大图标·抹茶", background: "#f2fcf5", border: "#b5e1c4", accent: "#4d9d72", preedit: "#5d806c", text: "#256d49", muted: "#7eae8f", motif: "", mascot: "mint-cat-mascot.png" },
+        { id: "berry-bear", name: "莓果小熊", subtitle: "大图标·甜心", background: "#fff5f1", border: "#f2bda8", accent: "#db7757", preedit: "#966759", text: "#b94d40", muted: "#be8b7e", motif: "", mascot: "strawberry-bear-mascot.png" }
     ]
 
     component DarkButton: Button {
@@ -324,10 +331,10 @@ Rectangle {
                 Column {
                     spacing: 16
                     Text { text: "外观"; color: "white"; font.pixelSize: 28; font.bold: true }
-                    Text { text: "主题会立即应用到候选窗；“午夜蓝”保留了你现在使用的外观。"; color: "#aeb8ca"; width: 680; wrapMode: Text.Wrap }
+                    Text { text: "主题会立即应用到候选窗；“午夜蓝”保留了你现在使用的外观。月兔、薄荷猫咪和莓果小熊会在右侧显示原创动态大图标。"; color: "#aeb8ca"; width: 708; wrapMode: Text.Wrap }
                     Grid {
-                        width: 640
-                        columns: 2
+                        width: 708
+                        columns: 4
                         columnSpacing: 12
                         rowSpacing: 12
                         Repeater {
@@ -335,48 +342,59 @@ Rectangle {
                             delegate: Rectangle {
                                 id: themeCard
                                 property var themeData: modelData
-                                width: 314
-                                height: 132
+                                width: 168
+                                height: 108
                                 radius: 10
                                 color: root.selectedTheme() === themeData.id ? "#263a5d" : "#202631"
                                 border.width: root.selectedTheme() === themeData.id ? 2 : 1
                                 border.color: root.selectedTheme() === themeData.id ? "#9dc0ff" : "#46556e"
                                 Column {
                                     anchors.fill: parent
-                                    anchors.margins: 12
-                                    spacing: 8
+                                    anchors.margins: 9
+                                    spacing: 4
                                     Row {
                                         width: parent.width
-                                        spacing: 8
-                                        Text { text: themeCard.themeData.name; width: 70; color: "#f4f7ff"; font.pixelSize: 16; font.bold: true }
-                                        Text { text: themeCard.themeData.subtitle; width: 150; color: "#aeb8ca"; font.pixelSize: 12; elide: Text.ElideRight }
-                                        Text { text: root.selectedTheme() === themeCard.themeData.id ? "已选" : ""; color: "#a9c7ff"; font.pixelSize: 12; font.bold: true }
+                                        spacing: 4
+                                        Text { text: themeCard.themeData.name; width: 90; color: "#f4f7ff"; font.pixelSize: 14; font.bold: true }
+                                        Text { text: root.selectedTheme() === themeCard.themeData.id ? "已选" : ""; width: 38; horizontalAlignment: Text.AlignRight; color: "#a9c7ff"; font.pixelSize: 12; font.bold: true }
                                     }
+                                    Text { text: themeCard.themeData.subtitle; width: parent.width; color: "#aeb8ca"; font.pixelSize: 12; elide: Text.ElideRight }
                                     Rectangle {
                                         width: parent.width
-                                        height: 52
+                                        height: 43
                                         radius: 8
                                         color: themeCard.themeData.background
                                         border.width: 1
                                         border.color: themeCard.themeData.border
                                         Row {
                                             anchors.fill: parent
-                                            anchors.margins: 10
-                                            spacing: 9
-                                            Text { text: "zh"; color: themeCard.themeData.accent; font.pixelSize: 12; font.bold: true }
-                                            Text { text: "nihao"; color: themeCard.themeData.preedit; font.pixelSize: 12 }
-                                            Text { text: "1"; color: themeCard.themeData.muted; font.pixelSize: 12 }
-                                            Text { text: "你好"; color: themeCard.themeData.text; font.pixelSize: 15; font.bold: true }
+                                            anchors.margins: 8
+                                            spacing: 6
+                                            Text { text: "zh"; color: themeCard.themeData.accent; font.pixelSize: 11; font.bold: true }
+                                            Text { text: "nihao"; color: themeCard.themeData.preedit; font.pixelSize: 11 }
+                                            Text { text: "1"; color: themeCard.themeData.muted; font.pixelSize: 11 }
+                                            Text { text: "你好"; color: themeCard.themeData.text; font.pixelSize: 14; font.bold: true }
+                                        }
+                                        Text {
+                                            visible: themeCard.themeData.motif.length > 0 && themeCard.themeData.mascot.length === 0
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 8
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: themeCard.themeData.motif || ""
+                                            color: themeCard.themeData.accent
+                                            opacity: 0.24
+                                            font.pixelSize: themeCard.themeData.id === "matcha" ? 12 : 26
+                                            font.bold: true
                                         }
                                         Image {
-                                            visible: themeCard.themeData.id === "starlight"
+                                            visible: themeCard.themeData.mascot.length > 0
                                             anchors.right: parent.right
                                             anchors.rightMargin: 8
                                             anchors.bottom: parent.bottom
-                                            width: 38
-                                            height: 48
-                                            source: "qrc:/themes/anime-mascot.png"
-                                            sourceClipRect: Qt.rect(300, 70, 650, 1100)
+                                            width: 34
+                                            height: 43
+                                            source: themeCard.themeData.mascot.length > 0 ? "qrc:/themes/" + themeCard.themeData.mascot : ""
+                                            sourceClipRect: themeCard.themeData.id === "starlight" ? Qt.rect(300, 70, 650, 1100) : Qt.rect(0, 0, 1254, 1254)
                                             fillMode: Image.PreserveAspectFit
                                             smooth: true
                                         }

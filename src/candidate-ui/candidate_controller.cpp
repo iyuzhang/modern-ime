@@ -7,6 +7,23 @@
 #include <QJsonObject>
 #include <QScreen>
 namespace modernime {
+namespace {
+constexpr int kMascotTopInset = 66;
+constexpr int kMascotReservedWidth = 120;
+
+bool hasMascot(CandidateTheme theme) {
+    switch (theme) {
+    case CandidateTheme::Starlight:
+    case CandidateTheme::MoonRabbit:
+    case CandidateTheme::MintCat:
+    case CandidateTheme::BerryBear:
+        return true;
+    default:
+        return false;
+    }
+}
+} // namespace
+
 CandidateController::CandidateController(QObject *parent) : QObject(parent) {
     auto bus = QDBusConnection::sessionBus();
     bus.connect(QStringLiteral("org.modernime.Service1"), QStringLiteral("/org/modernime/Service1"),
@@ -43,7 +60,7 @@ QVariantList CandidateController::candidates() const {
 int CandidateController::selected() const { return snapshot_.selected; }
 QString CandidateController::pageIndicator() const { return snapshot_.pages > 1 ? QStringLiteral("%1/%2").arg(snapshot_.page).arg(snapshot_.pages) : QString{}; }
 int CandidateController::windowHeight() const {
-    return candidateHeight() + (appearance_.theme == CandidateTheme::Starlight ? 36 : 0);
+    return candidateHeight() + (hasMascot(appearance_.theme) ? kMascotTopInset : 0);
 }
 int CandidateController::candidateHeight() const { return std::max(52, appearance_.font_size + 36); }
 int CandidateController::windowWidth() const {
@@ -81,7 +98,7 @@ int CandidateController::windowWidth() const {
     // Extra breathing room covers font fallback differences between the Qt
     // metrics and the QML renderer, preventing the trailing Esc hint from
     // being cut off on CJK fonts.
-    const int mascotWidth = appearance_.theme == CandidateTheme::Starlight ? 66 : 0;
+    const int mascotWidth = hasMascot(appearance_.theme) ? kMascotReservedWidth : 0;
     return std::clamp(width + 24 + mascotWidth, 240, 1'280);
 }
 bool CandidateController::vertical() const { return snapshot_.layout == CandidateLayout::Vertical; }
@@ -91,6 +108,13 @@ QString CandidateController::theme() const {
     case CandidateTheme::Cloud: return QStringLiteral("cloud");
     case CandidateTheme::Ink: return QStringLiteral("ink");
     case CandidateTheme::Starlight: return QStringLiteral("starlight");
+    case CandidateTheme::Sakura: return QStringLiteral("sakura");
+    case CandidateTheme::Matcha: return QStringLiteral("matcha");
+    case CandidateTheme::Lavender: return QStringLiteral("lavender");
+    case CandidateTheme::PeachSoda: return QStringLiteral("peach-soda");
+    case CandidateTheme::MoonRabbit: return QStringLiteral("moon-rabbit");
+    case CandidateTheme::MintCat: return QStringLiteral("mint-cat");
+    case CandidateTheme::BerryBear: return QStringLiteral("berry-bear");
     default: return QStringLiteral("midnight");
     }
 }
