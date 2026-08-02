@@ -65,6 +65,13 @@ journalctl --user -u modern-ime-service.service -u modern-ime-ui.service -b
 
 改动引擎后必须重新安装系统 ABI 目录中的插件并重启 Fcitx；只改候选 UI 或 Service 时只需安装对应用户程序并重启相应 user service。
 
+## 候选窗主题
+
+- `ConfigSnapshot::theme` 是持久化主题字段；有效值为 `midnight`、`aurora`、`cloud`、`ink`。缺失或未知值回落到 `midnight`，以保持旧配置的原有外观。
+- 设置页将主题和 `font_size`、`corner_radius`、`opacity` 通过 `UpdateConfig` 保存。Service 发出 `ConfigChanged` 后，候选窗的 `CandidateController::ApplyConfig` 立即更新外观；候选窗启动时通过 `GetConfig` 读取当前配置。
+- `CandidateWindow.qml` 定义候选窗实际色板；`SettingsWindow.qml` 定义选择卡的预览色板。新增主题时，两处色值必须同步，并在 `CandidateTheme`、序列化/解析和主题单元测试中加入该主题。
+- 字号会影响候选窗宽度和高度计算。修改文字尺寸、内边距或候选结构后，运行 offscreen 与 xcb 候选窗 smoke test。
+
 ## 调试守则
 
 - 不向真实桌面的候选 UI 注入测试快照，也不向用户正在输入的应用注入按键；使用私有 D-Bus 和 Xvfb。

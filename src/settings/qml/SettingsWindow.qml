@@ -10,6 +10,12 @@ Rectangle {
     property var config: ({})
     property string captureField: ""
     property string captureMessage: ""
+    property var candidateThemes: [
+        { id: "midnight", name: "午夜蓝", subtitle: "当前默认", background: "#1a1f29", border: "#51627b", accent: "#8ab4f8", preedit: "#b8c2d1", text: "#ffffff", muted: "#91a4ba" },
+        { id: "aurora", name: "极光绿", subtitle: "清透、低调", background: "#102728", border: "#5c9ee8", accent: "#78e7c0", preedit: "#c7eee1", text: "#ffffff", muted: "#93bdb1" },
+        { id: "cloud", name: "云雾白", subtitle: "明亮、专注", background: "#f7f9fc", border: "#cbd5e1", accent: "#2563a9", preedit: "#475569", text: "#0f172a", muted: "#64748b" },
+        { id: "ink", name: "墨韵", subtitle: "温暖、沉静", background: "#261f1d", border: "#73594d", accent: "#d9aa6c", preedit: "#e2c7a7", text: "#fff8ed", muted: "#b49b86" }
+    ]
 
     component DarkButton: Button {
         id: control
@@ -80,6 +86,12 @@ Rectangle {
     }
     function hotkeyLabel(value) {
         return (value || "未设置").replace("Control", "Ctrl").replace("bracketleft", "[").replace("bracketright", "]").replace("Page_Up", "PgUp").replace("Page_Down", "PgDn")
+    }
+    function selectedTheme() { return config.theme || "midnight" }
+    function saveAppearance(field, value) {
+        const next = JSON.parse(JSON.stringify(config))
+        next[field] = value
+        if (settings.saveConfig(JSON.stringify(next))) config = next
     }
     function capturedKey(event) {
         if (event.key >= Qt.Key_F1 && event.key <= Qt.Key_F35) return "F" + (event.key - Qt.Key_F1 + 1)
@@ -311,21 +323,69 @@ Rectangle {
                 Column {
                     spacing: 16
                     Text { text: "外观"; color: "white"; font.pixelSize: 28; font.bold: true }
-                    ComboBox { model: ["横向候选", "纵向候选"]; currentIndex: root.config.layout === "vertical" ? 1 : 0; onActivated: { root.config.layout = currentIndex ? "vertical" : "horizontal"; settings.saveConfig(JSON.stringify(root.config)) } }
-                    SpinBox { from: 12; to: 32; value: root.config.font_size || 15; onValueModified: { root.config.font_size = value; settings.saveConfig(JSON.stringify(root.config)) } }
-                    Rectangle {
-                        width: 620
-                        height: 54
-                        radius: 10
-                        color: "#10141d"
-                        Row {
-                            anchors.fill: parent
-                            anchors.margins: 12
-                            spacing: 15
-                            Text { text: "中  nihao"; color: "#8ab4f8" }
-                            Text { text: "1 你好"; color: "white"; font.pixelSize: 16 }
-                            Text { text: "2 你号"; color: "#cbd6e8" }
+                    Text { text: "主题会立即应用到候选窗；“午夜蓝”保留了你现在使用的外观。"; color: "#aeb8ca"; width: 680; wrapMode: Text.Wrap }
+                    Grid {
+                        width: 640
+                        columns: 2
+                        columnSpacing: 12
+                        rowSpacing: 12
+                        Repeater {
+                            model: root.candidateThemes
+                            delegate: Rectangle {
+                                id: themeCard
+                                property var themeData: modelData
+                                width: 314
+                                height: 132
+                                radius: 10
+                                color: root.selectedTheme() === themeData.id ? "#263a5d" : "#202631"
+                                border.width: root.selectedTheme() === themeData.id ? 2 : 1
+                                border.color: root.selectedTheme() === themeData.id ? "#9dc0ff" : "#46556e"
+                                Column {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 8
+                                    Row {
+                                        width: parent.width
+                                        spacing: 8
+                                        Text { text: themeCard.themeData.name; width: 70; color: "#f4f7ff"; font.pixelSize: 16; font.bold: true }
+                                        Text { text: themeCard.themeData.subtitle; width: 150; color: "#aeb8ca"; font.pixelSize: 12; elide: Text.ElideRight }
+                                        Text { text: root.selectedTheme() === themeCard.themeData.id ? "已选" : ""; color: "#a9c7ff"; font.pixelSize: 12; font.bold: true }
+                                    }
+                                    Rectangle {
+                                        width: parent.width
+                                        height: 52
+                                        radius: 8
+                                        color: themeCard.themeData.background
+                                        border.width: 1
+                                        border.color: themeCard.themeData.border
+                                        Row {
+                                            anchors.fill: parent
+                                            anchors.margins: 10
+                                            spacing: 9
+                                            Text { text: "zh"; color: themeCard.themeData.accent; font.pixelSize: 12; font.bold: true }
+                                            Text { text: "nihao"; color: themeCard.themeData.preedit; font.pixelSize: 12 }
+                                            Text { text: "1"; color: themeCard.themeData.muted; font.pixelSize: 12 }
+                                            Text { text: "你好"; color: themeCard.themeData.text; font.pixelSize: 15; font.bold: true }
+                                        }
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.saveAppearance("theme", themeCard.themeData.id)
+                                }
+                            }
                         }
+                    }
+                    ComboBox { model: ["横向候选", "纵向候选"]; currentIndex: root.config.layout === "vertical" ? 1 : 0; onActivated: { root.config.layout = currentIndex ? "vertical" : "horizontal"; settings.saveConfig(JSON.stringify(root.config)) } }
+                    Row {
+                        spacing: 18
+                        Text { text: "候选字号"; color: "#d7deea"; width: 72; anchors.verticalCenter: parent.verticalCenter }
+                        SpinBox { from: 12; to: 32; value: root.config.font_size || 15; onValueModified: root.saveAppearance("font_size", value) }
+                        Text { text: "圆角"; color: "#d7deea"; width: 40; anchors.verticalCenter: parent.verticalCenter }
+                        SpinBox { from: 0; to: 32; value: root.config.corner_radius === undefined ? 10 : root.config.corner_radius; onValueModified: root.saveAppearance("corner_radius", value) }
+                        Text { text: "背景不透明度"; color: "#d7deea"; width: 92; anchors.verticalCenter: parent.verticalCenter }
+                        SpinBox { from: 65; to: 100; value: root.config.opacity || 96; onValueModified: root.saveAppearance("opacity", value) }
                     }
                 }
 

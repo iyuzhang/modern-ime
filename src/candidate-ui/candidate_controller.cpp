@@ -1,4 +1,6 @@
 #include "candidate-ui/candidate_controller.h"
+#include <QDBusConnection>
+#include <QDBusInterface>
 #include <QGuiApplication>
 #include <QFontMetrics>
 #include <QJsonDocument>
@@ -6,6 +8,11 @@
 #include <QScreen>
 namespace modernime {
 CandidateController::CandidateController(QObject *parent) : QObject(parent) {
+    auto bus = QDBusConnection::sessionBus();
+    bus.connect(QStringLiteral("org.modernime.Service1"), QStringLiteral("/org/modernime/Service1"),
+                QStringLiteral("org.modernime.Service1"), QStringLiteral("ConfigChanged"), this,
+                SLOT(ApplyConfig(qulonglong,QString)));
+    loadAppearance();
     error_timer_.setSingleShot(true);
     error_timer_.setInterval(6'000);
     connect(&error_timer_, &QTimer::timeout, this, [this] {
@@ -35,6 +42,7 @@ QVariantList CandidateController::candidates() const {
 }
 int CandidateController::selected() const { return snapshot_.selected; }
 QString CandidateController::pageIndicator() const { return snapshot_.pages > 1 ? QStringLiteral("%1/%2").arg(snapshot_.page).arg(snapshot_.pages) : QString{}; }
+int CandidateController::windowHeight() const { return std::max(52, appearance_.font_size + 36); }
 int CandidateController::windowWidth() const {
     if (vertical()) return 420;
     const auto textWidth = [](const QString &text, int pixelSize, bool bold = false) {
@@ -50,16 +58,20 @@ int CandidateController::windowWidth() const {
         width += itemWidth;
         first = false;
     };
-    if (!mode().isEmpty()) addItem(textWidth(mode(), 14, true));
-    if (!preedit().isEmpty()) addItem(std::min(140, textWidth(preedit(), 14)));
-    if (!pageIndicator().isEmpty()) addItem(textWidth(pageIndicator(), 12));
+    const int preeditSize = std::max(12, appearance_.font_size - 1);
+    const int indexSize = std::max(11, appearance_.font_size - 2);
+    const int candidateSize = appearance_.font_size + 1;
+    const int annotationSize = std::max(11, appearance_.font_size - 3);
+    if (!mode().isEmpty()) addItem(textWidth(mode(), preeditSize, true));
+    if (!preedit().isEmpty()) addItem(std::min(140, textWidth(preedit(), preeditSize)));
+    if (!pageIndicator().isEmpty()) addItem(textWidth(pageIndicator(), annotationSize));
     int index = 0;
     for (const auto &candidate : candidates()) {
         const auto item = candidate.toMap();
-        int candidateWidth = textWidth(item.value(QStringLiteral("number")).toString(), 13);
-        candidateWidth += 5 + textWidth(item.value(QStringLiteral("text")).toString(), 16, index == selected());
+        int candidateWidth = textWidth(item.value(QStringLiteral("number")).toString(), indexSize);
+        candidateWidth += 5 + textWidth(item.value(QStringLiteral("text")).toString(), candidateSize, index == selected());
         const auto annotation = item.value(QStringLiteral("annotation")).toString();
-        if (!annotation.isEmpty()) candidateWidth += 5 + textWidth(annotation, 12);
+        if (!annotation.isEmpty()) candidateWidth += 5 + textWidth(annotation, annotationSize);
         addItem(candidateWidth);
         ++index;
     }
@@ -69,8 +81,35 @@ int CandidateController::windowWidth() const {
     return std::clamp(width + 24, 240, 1'280);
 }
 bool CandidateController::vertical() const { return snapshot_.layout == CandidateLayout::Vertical; }
+QString CandidateController::theme() const {
+    switch (appearance_.theme) {
+    case CandidateTheme::Aurora: return QStringLiteral("aurora");
+    case CandidateTheme::Cloud: return QStringLiteral("cloud");
+    case CandidateTheme::Ink: return QStringLiteral("ink");
+    default: return QStringLiteral("midnight");
+    }
+}
+int CandidateController::fontSize() const { return appearance_.font_size; }
+int CandidateController::cornerRadius() const { return appearance_.corner_radius; }
+int CandidateController::backgroundOpacity() const { return appearance_.opacity; }
 int CandidateController::windowX() const { return x_; }
 int CandidateController::windowY() const { return y_; }
+
+void CandidateController::loadAppearance() {
+    QDBusInterface service(QStringLiteral("org.modernime.Service1"), QStringLiteral("/org/modernime/Service1"),
+                           QStringLiteral("org.modernime.Service1"), QDBusConnection::sessionBus());
+    const auto reply = service.call(QStringLiteral("GetConfig"));
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().empty()) return;
+    if (const auto config = parseConfigSnapshot(reply.arguments().front().toString().toUtf8().toStdString())) appearance_ = *config;
+}
+
+void CandidateController::ApplyConfig(qulonglong, const QString &serialized) {
+    const auto config = parseConfigSnapshot(serialized.toUtf8().toStdString());
+    if (!config) return;
+    appearance_ = *config;
+    if (visible_) position();
+    emit changed();
+}
 QString CandidateController::voiceErrorText() const {
     switch (voice_.error.value_or(ErrorCode::InvalidRequest)) {
     case ErrorCode::AudioDeviceMissing: return QStringLiteral("未找到可用麦克风");
@@ -135,7 +174,7 @@ void CandidateController::position() {
     if (!screen) return;
     const auto geometry = screen->availableGeometry();
     const int width = windowWidth();
-    constexpr int height = 52;
+    const int height = windowHeight();
     constexpr int margin = 16;
     if (cursor.position.x() < 0) {
         x_ = geometry.center().x() - width / 2;
@@ -190,7 +229,12 @@ QString CandidateController::Status() const {
     value.insert(QStringLiteral("candidate_count"), candidates().size());
     value.insert(QStringLiteral("page"), snapshot_.page);
     value.insert(QStringLiteral("pages"), snapshot_.pages);
+    value.insert(QStringLiteral("theme"), theme());
+    value.insert(QStringLiteral("font_size"), fontSize());
+    value.insert(QStringLiteral("corner_radius"), cornerRadius());
+    value.insert(QStringLiteral("background_opacity"), backgroundOpacity());
     value.insert(QStringLiteral("window_width"), windowWidth());
+    value.insert(QStringLiteral("window_height"), windowHeight());
     value.insert(QStringLiteral("voice_state"), QString::fromStdString(voiceStateName(voice_.state)));
     if (voice_.error) value.insert(QStringLiteral("voice_error"), QString::fromStdString(errorCodeName(*voice_.error)));
     value.insert(QStringLiteral("x"), x_);

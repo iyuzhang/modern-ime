@@ -28,6 +28,7 @@ enum class ErrorCode {
 enum class VoiceState { Idle, Starting, Listening, Finalizing, Review, Committing, Error };
 enum class VoiceTriggerMode { PushToTalk, Toggle };
 enum class CandidateLayout { Horizontal, Vertical };
+enum class CandidateTheme { Midnight, Aurora, Cloud, Ink };
 
 struct Candidate {
     std::string text;
@@ -66,6 +67,10 @@ struct ConfigSnapshot {
     int font_size = 15;
     int corner_radius = 10;
     int opacity = 96;
+    // Keep the established midnight appearance as the default so existing
+    // installations do not change visual style when the new theme setting is
+    // introduced.
+    CandidateTheme theme = CandidateTheme::Midnight;
     VoiceTriggerMode voice_trigger = VoiceTriggerMode::PushToTalk;
     bool voice_auto_commit = false;
     // These are portable Fcitx key names (for example "F8" or
