@@ -1,4 +1,5 @@
 #include "contracts/contracts.h"
+#include "contracts/audio_health.h"
 #include "contracts/voice_model.h"
 #include <QDir>
 #include <QFile>
@@ -49,6 +50,27 @@ TEST_CASE("candidate themes round trip and unknown themes retain the current def
 TEST_CASE("hotkey configuration round trips with portable Fcitx names") { modernime::ConfigSnapshot input; input.voice_hotkey = "Control+F8"; input.cancel_hotkey = "Control+Escape"; input.next_page_hotkey = "bracketright"; const auto parsed = modernime::parseConfigSnapshot(modernime::serialize(input)); REQUIRE(parsed); REQUIRE(parsed->voice_hotkey == "Control+F8"); REQUIRE(parsed->cancel_hotkey == "Control+Escape"); REQUIRE(parsed->next_page_hotkey == "bracketright"); }
 TEST_CASE("voice error round trips with a stable error code") { modernime::VoiceEvent input; input.session_id = "voice-1"; input.state = modernime::VoiceState::Error; input.error = modernime::ErrorCode::ModelMissing; const auto parsed = modernime::parseVoiceEvent(modernime::serialize(input)); REQUIRE(parsed); REQUIRE(parsed->error == modernime::ErrorCode::ModelMissing); }
 TEST_CASE("recognizer empty output is distinct from missing speech") { modernime::VoiceEvent input; input.session_id = "voice-rare-word"; input.state = modernime::VoiceState::Error; input.error = modernime::ErrorCode::RecognizerNoResult; const auto parsed = modernime::parseVoiceEvent(modernime::serialize(input)); REQUIRE(parsed); REQUIRE(parsed->error == modernime::ErrorCode::RecognizerNoResult); }
+TEST_CASE("digitally silent audio retries once before reporting a broken stream") {
+    modernime::SilentCaptureMonitor monitor;
+    REQUIRE(monitor.observe(7'999, 0.0F) == modernime::SilentCaptureAction::None);
+    REQUIRE(monitor.observe(8'000, 0.001F) == modernime::SilentCaptureAction::None);
+    REQUIRE(monitor.observe(8'000, 0.0F) == modernime::SilentCaptureAction::Reconnect);
+    REQUIRE(monitor.recoveryAttempted());
+    REQUIRE(monitor.observe(16'000, 0.0F) == modernime::SilentCaptureAction::Fail);
+    monitor.reset();
+    REQUIRE_FALSE(monitor.recoveryAttempted());
+    REQUIRE(modernime::isDigitallySilentCapture(1'600, 0.0F));
+    REQUIRE_FALSE(modernime::isDigitallySilentCapture(1'599, 0.0F));
+}
+TEST_CASE("silent audio device error round trips with a stable error code") {
+    modernime::VoiceEvent input;
+    input.session_id = "voice-silent-device";
+    input.state = modernime::VoiceState::Error;
+    input.error = modernime::ErrorCode::AudioStreamSilent;
+    const auto parsed = modernime::parseVoiceEvent(modernime::serialize(input));
+    REQUIRE(parsed);
+    REQUIRE(parsed->error == modernime::ErrorCode::AudioStreamSilent);
+}
 TEST_CASE("final voice transcripts always have a clean sentence boundary") {
     REQUIRE(modernime::finalizeVoiceTranscript("  今天天气不错  ") == "今天天气不错。");
     REQUIRE(modernime::finalizeVoiceTranscript("你好 ，世界！") == "你好，世界！");

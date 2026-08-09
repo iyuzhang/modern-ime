@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=org.modernime.Service1
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/modern-ime-service

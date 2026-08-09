@@ -4,7 +4,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/modern-ime-service
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/modern-ime-service
 Restart=on-failure
 RestartSec=1
 

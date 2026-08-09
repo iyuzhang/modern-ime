@@ -41,10 +41,10 @@ CandidateController::CandidateController(QObject *parent) : QObject(parent) {
 }
 bool CandidateController::visible() const { return visible_; }
 QString CandidateController::preedit() const { return voice_.state == VoiceState::Idle ? QString::fromUtf8(snapshot_.preedit) : QString{}; }
-QString CandidateController::mode() const { if (voice_.state == VoiceState::Listening) return QStringLiteral("● 聆听中"); if (voice_.state == VoiceState::Finalizing) return QStringLiteral("⌛ 识别中"); if (voice_.state == VoiceState::Review) return QStringLiteral("✓ 识别完成"); if (voice_.state == VoiceState::Error) return QStringLiteral("! 语音错误"); return QString::fromUtf8(snapshot_.mode); }
+QString CandidateController::mode() const { if (voice_.state == VoiceState::Starting) return QStringLiteral("↻ 正在连接麦克风"); if (voice_.state == VoiceState::Listening) return QStringLiteral("● 聆听中"); if (voice_.state == VoiceState::Finalizing) return QStringLiteral("⌛ 识别中"); if (voice_.state == VoiceState::Review) return QStringLiteral("✓ 识别完成"); if (voice_.state == VoiceState::Error) return QStringLiteral("! 语音错误"); return QString::fromUtf8(snapshot_.mode); }
 QVariantList CandidateController::candidates() const {
     QVariantList result;
-    const bool showingVoice = voice_.state == VoiceState::Listening || voice_.state == VoiceState::Finalizing || voice_.state == VoiceState::Review || voice_.state == VoiceState::Error;
+    const bool showingVoice = voice_.state == VoiceState::Starting || voice_.state == VoiceState::Listening || voice_.state == VoiceState::Finalizing || voice_.state == VoiceState::Review || voice_.state == VoiceState::Error;
     std::vector<Candidate> voiceItems;
     const auto *items = &snapshot_.candidates;
     if (showingVoice) {
@@ -125,9 +125,15 @@ int CandidateController::windowX() const { return x_; }
 int CandidateController::windowY() const { return y_; }
 
 void CandidateController::loadAppearance() {
-    QDBusInterface service(QStringLiteral("org.modernime.Service1"), QStringLiteral("/org/modernime/Service1"),
-                           QStringLiteral("org.modernime.Service1"), QDBusConnection::sessionBus());
-    const auto reply = service.call(QStringLiteral("GetConfig"));
+    auto request = QDBusMessage::createMethodCall(QStringLiteral("org.modernime.Service1"),
+                                                   QStringLiteral("/org/modernime/Service1"),
+                                                   QStringLiteral("org.modernime.Service1"),
+                                                   QStringLiteral("GetConfig"));
+    // The service owns the candidate UI lifecycle. If startup ordering is
+    // temporarily inverted, do not make the UI activate a second service;
+    // ConfigChanged will apply the appearance once the owner is available.
+    request.setAutoStartService(false);
+    const auto reply = QDBusConnection::sessionBus().call(request);
     if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().empty()) return;
     if (const auto config = parseConfigSnapshot(reply.arguments().front().toString().toUtf8().toStdString())) appearance_ = *config;
 }
@@ -144,6 +150,7 @@ QString CandidateController::voiceErrorText() const {
     case ErrorCode::AudioDeviceMissing: return QStringLiteral("未找到可用麦克风");
     case ErrorCode::AudioPermissionDenied: return QStringLiteral("麦克风权限被拒绝");
     case ErrorCode::AudioBufferOverrun: return QStringLiteral("录音缓冲区溢出");
+    case ErrorCode::AudioStreamSilent: return QStringLiteral("麦克风连接无音频");
     case ErrorCode::ModelMissing: return QStringLiteral("语音模型未安装");
     case ErrorCode::ModelCorrupt: return QStringLiteral("语音模型已损坏");
     case ErrorCode::ModelLoadFailed: return QStringLiteral("语音模型无法加载");
@@ -158,6 +165,7 @@ QString CandidateController::voiceErrorText() const {
 QString CandidateController::voiceErrorHint() const {
     switch (voice_.error.value_or(ErrorCode::InvalidRequest)) {
     case ErrorCode::AudioDeviceMissing: return QStringLiteral("检查麦克风；蓝牙需切到 HFP/HSP");
+    case ErrorCode::AudioStreamSilent: return QStringLiteral("蓝牙连接假在线；重连耳机或改用内置麦克风");
     case ErrorCode::EmptySpeech: return QStringLiteral("靠近麦克风说话；蓝牙请保持 HFP/HSP 通话模式");
     case ErrorCode::RecognizerNoResult: return QStringLiteral("短词或专名可加入个人词库后重试");
     default: return QStringLiteral("Esc 关闭");
@@ -251,7 +259,7 @@ void CandidateController::ShowVoiceEvent(const QString &serialized) {
     const bool wasVisible = visible_;
     voice_ = *value;
     if (voice_.state == VoiceState::Error) error_timer_.start(); else error_timer_.stop();
-    visible_ = snapshot_.visible || (voice_.state != VoiceState::Idle && voice_.state != VoiceState::Starting);
+    visible_ = snapshot_.visible || voice_.state != VoiceState::Idle;
     if (visible_ && (!wasVisible || changedVisually)) position();
     if (changedVisually || wasVisible != visible_) emit changed();
 }

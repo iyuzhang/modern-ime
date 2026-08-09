@@ -16,6 +16,7 @@ enum class ErrorCode {
     AudioDeviceMissing,
     AudioPermissionDenied,
     AudioBufferOverrun,
+    AudioStreamSilent,
     ModelMissing,
     ModelCorrupt,
     ModelLoadFailed,

@@ -13,10 +13,12 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QThread>
+#include <QDebug>
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <exception>
 
 namespace modernime {
 namespace {
@@ -24,7 +26,6 @@ namespace {
 constexpr float kBluetoothInputGain = 4.0F;
 constexpr float kSpeechLevel = 0.003F;
 constexpr qint64 kStreamReadyTimeoutMs = 3'000;
-constexpr qint64 kPreviewPunctuationIntervalMs = 600;
 
 const pw_stream_events kStreamEvents = [] {
     pw_stream_events events{};
@@ -172,6 +173,34 @@ void VoiceWorker::closeStream() {
     listening_ = false;
 }
 
+void VoiceWorker::resetCaptureCounters() {
+    frames_.store(0, std::memory_order_relaxed);
+    speech_frames_.store(0, std::memory_order_relaxed);
+    level_.store(0.0F, std::memory_order_relaxed);
+    peak_.store(0.0F, std::memory_order_relaxed);
+    write_sequence_.store(0, std::memory_order_relaxed);
+    read_sequence_.store(0, std::memory_order_relaxed);
+    audio_overrun_.store(false, std::memory_order_relaxed);
+}
+
+bool VoiceWorker::reconnectSilentStream() {
+    closeStream();
+    resetCaptureCounters();
+    if (!openStream()) return false;
+    silent_stream_recoveries_.fetch_add(1, std::memory_order_relaxed);
+    listening_ = true;
+    meter_timer_.start();
+    publish(VoiceState::Listening);
+    return true;
+}
+
+void VoiceWorker::failSilentStream() {
+    closeStream();
+    closeRecognitionStream();
+    listening_ = false;
+    publish(VoiceState::Error, {}, ErrorCode::AudioStreamSilent);
+}
+
 bool VoiceWorker::openRecognizer(ErrorCode *error) {
     if (recognizer_) return true;
     const auto paths = xdgPaths();
@@ -314,30 +343,20 @@ void VoiceWorker::closePunctuation() {
 std::string VoiceWorker::punctuate(const std::string &text) {
     if (text.empty()) return {};
     if (!punctuation_) return finalizeVoiceTranscript(text);
-    const auto *result = sherpa_.addOfflinePunctuation(punctuation_, text.c_str());
-    if (!result) return finalizeVoiceTranscript(text);
-    std::string output(result);
-    sherpa_.freeOfflinePunctuationText(result);
-    return finalizeVoiceTranscript(output.empty() ? text : output);
-}
-
-std::string VoiceWorker::punctuatePreview(const std::string &text) {
-    if (text.empty()) return {};
-    QElapsedTimer timer;
-    timer.start();
-    if (!punctuation_) {
-        preview_punctuation_ms_.store(timer.elapsed(), std::memory_order_relaxed);
-        return previewVoiceTranscript(text);
+    try {
+        const auto *result = sherpa_.addOfflinePunctuation(punctuation_, text.c_str());
+        if (!result) return finalizeVoiceTranscript(text);
+        std::string output(result);
+        sherpa_.freeOfflinePunctuationText(result);
+        return finalizeVoiceTranscript(output.empty() ? text : output);
+    } catch (const std::exception &error) {
+        punctuation_failures_.fetch_add(1, std::memory_order_relaxed);
+        qWarning().noquote() << "punctuation inference failed; using raw transcript:" << error.what();
+    } catch (...) {
+        punctuation_failures_.fetch_add(1, std::memory_order_relaxed);
+        qWarning() << "punctuation inference failed; using raw transcript";
     }
-    const auto *result = sherpa_.addOfflinePunctuation(punctuation_, text.c_str());
-    if (!result) {
-        preview_punctuation_ms_.store(timer.elapsed(), std::memory_order_relaxed);
-        return previewVoiceTranscript(text);
-    }
-    std::string output(result);
-    sherpa_.freeOfflinePunctuationText(result);
-    preview_punctuation_ms_.store(timer.elapsed(), std::memory_order_relaxed);
-    return previewVoiceTranscript(output.empty() ? text : output);
+    return finalizeVoiceTranscript(text);
 }
 
 void VoiceWorker::closeRecognitionStream() {
@@ -403,19 +422,12 @@ bool VoiceWorker::Start(const QString &sessionId, qulonglong focusGeneration) {
     startTimer.start();
     session_id_ = sessionId;
     focus_generation_ = focusGeneration;
-    frames_ = 0;
-    speech_frames_ = 0;
-    level_ = 0.0F;
-    peak_ = 0.0F;
-    write_sequence_ = 0;
-    read_sequence_ = 0;
-    audio_overrun_ = false;
+    resetCaptureCounters();
+    silent_capture_monitor_.reset();
+    last_error_.store(-1, std::memory_order_relaxed);
+    last_result_chars_.store(0, std::memory_order_relaxed);
     vad_speech_detected_ = false;
     transcript_.clear();
-    preview_source_.clear();
-    preview_text_.clear();
-    preview_punctuation_timer_.invalidate();
-    preview_punctuation_ms_.store(-1, std::memory_order_relaxed);
     final_result_.clear();
     publish(VoiceState::Starting);
     if (source_.contains(QStringLiteral(".monitor"))) {
@@ -458,7 +470,18 @@ bool VoiceWorker::Stop(const QString &sessionId) {
     if (!listening_ || sessionId != session_id_) return false;
     QElapsedTimer finalizationTimer;
     finalizationTimer.start();
-    publish(VoiceState::Finalizing, preview_text_.empty() ? previewVoiceTranscript(transcript_) : preview_text_);
+    publish(VoiceState::Finalizing, previewVoiceTranscript(transcript_));
+    const auto capturedFrames = frames_.load(std::memory_order_relaxed);
+    const auto capturedPeak = peak_.load(std::memory_order_relaxed);
+    const auto minimumSilentFrames = silent_capture_monitor_.recoveryAttempted() ? 1ULL : 1'600ULL;
+    if (isDigitallySilentCapture(capturedFrames, capturedPeak, minimumSilentFrames)) {
+        closeStream();
+        closeRecognitionStream();
+        listening_ = false;
+        publish(VoiceState::Error, {}, ErrorCode::AudioStreamSilent);
+        finalization_ms_.store(finalizationTimer.elapsed(), std::memory_order_relaxed);
+        return true;
+    }
     if (!setStreamActive(false)) closeStream();
     decodeAudio(0);
     sherpa_.inputFinished(recognition_stream_);
@@ -493,9 +516,6 @@ bool VoiceWorker::Cancel(const QString &sessionId) {
     meter_timer_.stop();
     listening_ = false;
     transcript_.clear();
-    preview_source_.clear();
-    preview_text_.clear();
-    preview_punctuation_timer_.invalidate();
     final_result_.clear();
     publish(VoiceState::Idle);
     return true;
@@ -518,6 +538,9 @@ QString VoiceWorker::Status() {
     value.insert(QStringLiteral("peak"), peak_.load(std::memory_order_relaxed));
     value.insert(QStringLiteral("input_gain"), input_gain_);
     value.insert(QStringLiteral("audio_overrun"), audio_overrun_.load(std::memory_order_relaxed));
+    value.insert(QStringLiteral("digital_silence"), isDigitallySilentCapture(frames_.load(std::memory_order_relaxed), peak_.load(std::memory_order_relaxed)));
+    value.insert(QStringLiteral("silent_stream_recoveries"), static_cast<qint64>(silent_stream_recoveries_.load(std::memory_order_relaxed)));
+    value.insert(QStringLiteral("silent_stream_recovery_attempted"), silent_capture_monitor_.recoveryAttempted());
     value.insert(QStringLiteral("stream_state"), QString::fromLatin1(pw_stream_state_as_string(static_cast<pw_stream_state>(stream_state_.load(std::memory_order_relaxed)))));
     value.insert(QStringLiteral("warming_up"), warmingUp);
     value.insert(QStringLiteral("recognizer_loaded"), !warmingUp && recognizer_ != nullptr);
@@ -528,7 +551,7 @@ QString VoiceWorker::Status() {
     value.insert(QStringLiteral("warmup_ms"), warmup_ms_.load(std::memory_order_relaxed));
     value.insert(QStringLiteral("start_latency_ms"), start_latency_ms_.load(std::memory_order_relaxed));
     value.insert(QStringLiteral("finalization_ms"), finalization_ms_.load(std::memory_order_relaxed));
-    value.insert(QStringLiteral("preview_punctuation_ms"), preview_punctuation_ms_.load(std::memory_order_relaxed));
+    value.insert(QStringLiteral("punctuation_failures"), static_cast<qint64>(punctuation_failures_.load(std::memory_order_relaxed)));
     value.insert(QStringLiteral("last_result_chars"), last_result_chars_.load(std::memory_order_relaxed));
     const int lastError = last_error_.load(std::memory_order_relaxed);
     value.insert(QStringLiteral("last_error"), lastError < 0 ? QString{} : QString::fromStdString(errorCodeName(static_cast<ErrorCode>(lastError))));
@@ -537,14 +560,22 @@ QString VoiceWorker::Status() {
 
 void VoiceWorker::publishMeter() {
     if (!listening_) return;
-    decodeAudio(3);
-    const bool punctuationDue = !preview_punctuation_timer_.isValid() || preview_punctuation_timer_.elapsed() >= kPreviewPunctuationIntervalMs;
-    if (transcript_ != preview_source_ && punctuationDue) {
-        preview_source_ = transcript_;
-        preview_text_ = punctuatePreview(transcript_);
-        preview_punctuation_timer_.restart();
+    const auto silentAction = silent_capture_monitor_.observe(frames_.load(std::memory_order_relaxed),
+                                                              peak_.load(std::memory_order_relaxed));
+    if (silentAction == SilentCaptureAction::Reconnect) {
+        publish(VoiceState::Starting);
+        if (!reconnectSilentStream()) failSilentStream();
+        return;
     }
-    publish(VoiceState::Listening, preview_text_.empty() ? transcript_ : preview_text_);
+    if (silentAction == SilentCaptureAction::Fail) {
+        failSilentStream();
+        return;
+    }
+    decodeAudio(3);
+    // Offline punctuation models are designed for completed sentences. Running
+    // one on rapidly changing partial hypotheses can reject short/intermediate
+    // tensor shapes; keep live previews raw and punctuate only the final text.
+    publish(VoiceState::Listening, previewVoiceTranscript(transcript_));
 }
 
 void VoiceWorker::process(void *data) {

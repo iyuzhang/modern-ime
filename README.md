@@ -11,7 +11,7 @@ Modern IME 是一个面向 Fcitx5 的本地输入法，将全拼、英文原文�
 - `Space`、数字键、方向键、翻页、`Enter` 和 `Esc` 等基本输入操作。
 - 独立 Qt Quick 候选窗，支持 150% 缩放定位、无焦点置顶和引擎重启恢复。
 - 候选窗提供 12 套主题，包含简洁配色和原创动态角色主题，可调整字号、圆角和背景不透明度。
-- F8 按住说话、PipeWire 流复用、Silero VAD、sherpa-onnx 流式识别、INT8 离线中英标点恢复、句末标点兜底和松开提交。
+- F8 按住说话、PipeWire 流复用、Silero VAD、sherpa-onnx 流式识别、最终阶段 INT8 离线中英标点恢复、句末标点兜底和松开提交；蓝牙麦克风数字静音时会自动重连一次并给出明确提示。
 - 默认使用 2025 普通话模型；设置页可在已安装模型中切换，并保留旧中英混输兼容模型。
 - 个人词库自动生成本地 ASR 热词，稀有短词会使用 modified beam search 做上下文偏置。
 - 设置界面、麦克风选择、快捷键设置、词库导入导出和 Fcitx 配置修复。
@@ -41,7 +41,27 @@ Modern IME 是一个面向 Fcitx5 的本地输入法，将全拼、英文原文�
 
 ![语音识别候选窗](docs/images/voice-recognition.jpg)
 
-## 构建和安装
+## 安装（Ubuntu 24.04 x86_64）
+
+推荐使用 Debian 安装包。拿到项目生成的 `.deb` 后，在文件所在目录运行：
+
+```bash
+sudo apt install ./modern-ime_0.1.2_amd64.deb
+```
+
+安装完成后，从应用菜单打开“Modern 输入法”，点击“启用 Modern IME”，再用 `Ctrl+Space` 或 Fcitx 输入法切换器选择它。首次使用语音时，在设置的“语音”页点击“下载离线语音模型”；键盘输入不需要下载模型。
+
+语音输入时按住 `F8` 说话、松开提交。候选窗会立即显示连接或聆听状态；实时文字保持低延迟原文预览，只在松开后对完整结果恢复标点。标点模型异常会自动退回未加标点的识别文本，不会中断语音进程。
+
+卸载使用：
+
+```bash
+sudo apt remove modern-ime
+```
+
+个人配置、词库和已下载的离线模型会保留。
+
+## 从源码构建
 
 安装依赖和开发说明见 [docs/development.md](docs/development.md)。典型流程：
 
@@ -54,7 +74,9 @@ ctest --test-dir build-release --output-on-failure
 ./tools/install-user.sh build-release
 ```
 
-卸载程序使用 `./tools/uninstall-user.sh`。个人配置、词库和模型默认保留。
+源码安装默认只安装键盘输入功能，不再自动下载语音模型；可在设置页按需下载，或设置 `MODERN_IME_INSTALL_MODEL=1` 让脚本同时安装。卸载程序使用 `./tools/uninstall-user.sh`，个人配置、词库和模型默认保留。
+
+维护者可运行 `./tools/build-deb.sh`，经过 Release 构建和完整 CTest 后，安装包会生成到 `dist/`。
 
 ## 文档
 

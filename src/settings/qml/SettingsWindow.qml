@@ -212,10 +212,10 @@ Rectangle {
                         }
                     }
                     DarkButton {
-                        text: "修复 Fcitx 配置"
+                        text: "启用 Modern IME"
                         onClicked: settings.repairFcitx()
                     }
-                    Text { text: "当在 Fcitx 配置中误删 Modern IME，或改动其它拼音引擎后无法切回时使用。它只会在当前组缺失时补回 Modern IME，不会重置、删除或重排其它输入法。"; color: "#b8c5dc"; width: 620; wrapMode: Text.Wrap }
+                    Text { text: "首次安装或在 Fcitx 配置中误删后点击。它只会在当前组缺失时补回 Modern IME，不会重置、删除或重排其它输入法。"; color: "#b8c5dc"; width: 620; wrapMode: Text.Wrap }
                     TextArea {
                         width: 620
                         height: 160
@@ -360,6 +360,27 @@ Rectangle {
                         wrapMode: Text.Wrap
                         color: "#aeb8ca"
                         text: voiceModel.currentIndex >= 0 ? settings.voiceModels[voiceModel.currentIndex].description : "请先运行本地语音模型安装程序。"
+                    }
+                    Row {
+                        spacing: 12
+                        DarkButton {
+                            enabled: !settings.voiceModelInstallRunning
+                            text: settings.voiceModelInstallRunning ? "正在下载…" : (settings.voiceModels.length > 0 ? "校验或更新语音模型" : "下载离线语音模型")
+                            onClicked: settings.installVoiceModel()
+                        }
+                        BusyIndicator {
+                            width: 34
+                            height: 34
+                            running: settings.voiceModelInstallRunning
+                            visible: running
+                        }
+                    }
+                    Text {
+                        visible: settings.voiceModelInstallStatus.length > 0
+                        width: 620
+                        wrapMode: Text.Wrap
+                        color: settings.voiceModelInstallRunning ? "#a9c7ff" : "#9fe1b6"
+                        text: settings.voiceModelInstallStatus
                     }
                     ComboBox {
                         model: ["按住说话", "点击切换"]

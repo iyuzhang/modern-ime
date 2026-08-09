@@ -5,7 +5,7 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/modern-ime-candidate-ui
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/modern-ime-candidate-ui
 Restart=on-failure
 RestartSec=1
 

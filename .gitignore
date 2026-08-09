@@ -3,5 +3,6 @@ build-*/
 .cache/
 compile_commands.json
 Testing/
+/dist/
 *.user
 *.user.*

@@ -20,6 +20,7 @@ int main(int argc, char **argv) {
     QCommandLineParser parser;
     parser.addOption({QStringLiteral("self-test"), QStringLiteral("Show a sample candidate window for visual verification")});
     parser.addOption({QStringLiteral("smoke-test"), QStringLiteral("Load and render one frame, then exit")});
+    parser.addOption({QStringLiteral("smoke-test-voice-error"), QStringLiteral("Render a silent microphone error, then exit")});
     parser.process(app);
 
     modernime::CandidateController controller;
@@ -60,7 +61,9 @@ int main(int argc, char **argv) {
 
     const bool visualSelfTest = parser.isSet(QStringLiteral("self-test"));
     const bool smokeTest = parser.isSet(QStringLiteral("smoke-test"));
-    if (visualSelfTest || smokeTest) {
+    const bool voiceErrorSmokeTest = parser.isSet(QStringLiteral("smoke-test-voice-error"));
+    bool voiceStartingVisible = false;
+    if (visualSelfTest || smokeTest || voiceErrorSmokeTest) {
         modernime::CandidateSnapshot snapshot;
         snapshot.producer_id = "smoke-producer-before-restart";
         snapshot.sequence = 100;
@@ -77,6 +80,16 @@ int main(int argc, char **argv) {
             snapshot.preedit = "restart-ok";
             controller.ShowSnapshot(QString::fromUtf8(modernime::serialize(snapshot)));
         }
+        if (voiceErrorSmokeTest) {
+            modernime::VoiceEvent voice;
+            voice.session_id = "silent-device-smoke";
+            voice.state = modernime::VoiceState::Starting;
+            controller.ShowVoiceEvent(QString::fromUtf8(modernime::serialize(voice)));
+            voiceStartingVisible = controller.visible() && controller.mode() == QStringLiteral("↻ 正在连接麦克风");
+            voice.state = modernime::VoiceState::Error;
+            voice.error = modernime::ErrorCode::AudioStreamSilent;
+            controller.ShowVoiceEvent(QString::fromUtf8(modernime::serialize(voice)));
+        }
     }
     if (smokeTest) {
         QTimer::singleShot(50, &app, [&] {
@@ -91,6 +104,16 @@ int main(int argc, char **argv) {
                              x11LayeringOk
                          ? 0
                          : 3);
+        });
+    } else if (voiceErrorSmokeTest) {
+        QTimer::singleShot(50, &app, [&] {
+            const auto items = controller.candidates();
+            const auto item = items.isEmpty() ? QVariantMap{} : items.front().toMap();
+            app.exit(voiceStartingVisible && view.isVisible() && controller.mode() == QStringLiteral("! 语音错误") &&
+                             item.value(QStringLiteral("text")).toString() == QStringLiteral("麦克风连接无音频") &&
+                             item.value(QStringLiteral("annotation")).toString().contains(QStringLiteral("蓝牙连接假在线"))
+                         ? 0
+                         : 4);
         });
     }
     return app.exec();

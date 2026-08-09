@@ -40,7 +40,7 @@ install_tree() {
 }
 
 runtime_target="$runtime_root/sherpa-onnx-v1.13.2"
-if [[ -f $runtime_target/lib/libsherpa-onnx-c-api.so && -f $runtime_target/lib/libonnxruntime.so ]] && rg -q "$runtime_sha256" "$runtime_target/runtime.json"; then
+if [[ -f $runtime_target/lib/libsherpa-onnx-c-api.so && -f $runtime_target/lib/libonnxruntime.so ]] && grep -Fq "$runtime_sha256" "$runtime_target/runtime.json"; then
   printf 'Verified offline ASR runtime is already installed.\n'
 else
   printf 'Downloading verified offline ASR runtime (sherpa-onnx %s)…\n' "$runtime_version"
@@ -54,7 +54,7 @@ else
 fi
 
 model_target="$model_root/$model_id"
-if [[ -f $model_target/encoder.int8.onnx && -f $model_target/decoder.onnx && -f $model_target/joiner.int8.onnx && -f $model_target/tokens.txt ]] && rg -q "$model_sha256" "$model_target/model.json"; then
+if [[ -f $model_target/encoder.int8.onnx && -f $model_target/decoder.onnx && -f $model_target/joiner.int8.onnx && -f $model_target/tokens.txt ]] && grep -Fq "$model_sha256" "$model_target/model.json"; then
   printf 'Verified offline ASR model is already installed.\n'
 else
   printf 'Downloading verified 2025 Mandarin ASR model (~127 MB)…\n'
@@ -68,7 +68,7 @@ fi
 printf '{"format":"modern-ime-model","id":"%s","kind":"transducer","modeling_unit":"cjkchar","supports_hotwords":true,"files":{"encoder":"encoder.int8.onnx","decoder":"decoder.onnx","joiner":"joiner.int8.onnx","tokens":"tokens.txt"},"sherpa_onnx_version":"1.13.2","archive_sha256":"%s","source":"https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models","upstream":"https://huggingface.co/yuekai/icefall-asr-multi-zh-hans-zipformer-large","license":"REVIEW_REQUIRED"}\n' "$model_id" "$model_sha256" > "$model_target/model.json"
 
 vad_target="$model_root/silero-vad"
-if [[ -f $vad_target/silero_vad.onnx ]] && rg -q "$vad_sha256" "$vad_target/model.json"; then
+if [[ -f $vad_target/silero_vad.onnx ]] && grep -Fq "$vad_sha256" "$vad_target/model.json"; then
   printf 'Verified Silero VAD model is already installed.\n'
 else
   printf 'Downloading verified Silero VAD model…\n'
@@ -79,7 +79,7 @@ else
 fi
 
 punctuation_target="$model_root/$punctuation_id"
-if [[ -f $punctuation_target/model.int8.onnx ]] && rg -q "$punctuation_sha256" "$punctuation_target/model.json"; then
+if [[ -f $punctuation_target/model.int8.onnx ]] && grep -Fq "$punctuation_sha256" "$punctuation_target/model.json"; then
   printf 'Verified Chinese-English punctuation model is already installed.\n'
 else
   printf 'Downloading verified INT8 Chinese-English punctuation model (~62 MB)…\n'

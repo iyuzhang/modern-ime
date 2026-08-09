@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(modern-ime VERSION 0.1.0 LANGUAGES CXX)
+project(modern-ime VERSION 0.1.2 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CTest)
@@ -13,6 +13,23 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(MODERN_IME_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+option(MODERN_IME_INSTALL_TEST_TOOLS "Install ASR smoke test and latency benchmark programs" ON)
+option(MODERN_IME_ENABLE_DEB_PACKAGING "Generate CPack configuration for the Ubuntu Debian package" OFF)
+
+# User units and D-Bus activation files contain the final executable path.
+# Configuring them, rather than shipping a path tied to one installation
+# method, keeps both ~/.local source installs and /usr Debian packages valid.
+set(MODERN_IME_SYSTEMD_USER_UNIT_DIR "lib/systemd/user" CACHE PATH "systemd user unit installation directory")
+set(MODERN_IME_GENERATED_DATA_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated-data")
+file(MAKE_DIRECTORY "${MODERN_IME_GENERATED_DATA_DIR}/systemd" "${MODERN_IME_GENERATED_DATA_DIR}/dbus")
+foreach(unit modern-ime-service modern-ime-ui modern-ime-voice-worker)
+    configure_file("data/systemd/${unit}.service.in"
+        "${MODERN_IME_GENERATED_DATA_DIR}/systemd/${unit}.service" @ONLY)
+endforeach()
+foreach(service org.modernime.Service1 org.modernime.UI1)
+    configure_file("data/dbus/${service}.service.in"
+        "${MODERN_IME_GENERATED_DATA_DIR}/dbus/${service}.service" @ONLY)
+endforeach()
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core DBus Gui Qml Quick QuickControls2)
 find_package(SQLite3 REQUIRED)
@@ -33,6 +50,7 @@ function(modern_ime_target_defaults target)
 endfunction()
 
 add_library(modern-ime-contracts
+    src/contracts/audio_health.cpp
     src/contracts/contracts.cpp
     src/contracts/xdg.cpp
     src/contracts/logging.cpp
@@ -96,18 +114,30 @@ set_target_properties(modern-ime-ui-addon PROPERTIES PREFIX "lib" OUTPUT_NAME "m
 target_link_libraries(modern-ime-ui-addon PRIVATE modern-ime-contracts Fcitx5::Core)
 modern_ime_target_defaults(modern-ime-ui-addon)
 
-install(TARGETS modern-ime-service modern-ime-voice-worker modern-ime-candidate-ui modern-ime-settings modern-ime-asr-smoke modern-ime-latency-benchmark
+install(TARGETS modern-ime-service modern-ime-voice-worker modern-ime-candidate-ui modern-ime-settings
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(MODERN_IME_INSTALL_TEST_TOOLS)
+    install(TARGETS modern-ime-asr-smoke modern-ime-latency-benchmark RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 install(TARGETS modern-ime-engine-addon modern-ime-ui-addon
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}/fcitx5)
 install(FILES data/fcitx5/modernime.conf DESTINATION ${CMAKE_INSTALL_DATADIR}/fcitx5/addon)
 install(FILES data/fcitx5/modernimeui.conf DESTINATION ${CMAKE_INSTALL_DATADIR}/fcitx5/addon)
 install(FILES data/fcitx5/modernime-inputmethod.conf DESTINATION ${CMAKE_INSTALL_DATADIR}/fcitx5/inputmethod RENAME modernime.conf)
 install(FILES data/dbus/org.modernime.Service1.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/modern-ime/dbus)
+install(FILES
+    "${MODERN_IME_GENERATED_DATA_DIR}/dbus/org.modernime.Service1.service"
+    "${MODERN_IME_GENERATED_DATA_DIR}/dbus/org.modernime.UI1.service"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services)
 install(FILES data/modern-ime-settings.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(PROGRAMS tools/install-voice-model.sh DESTINATION ${CMAKE_INSTALL_DATADIR}/modern-ime)
-install(FILES data/systemd/modern-ime-service.service data/systemd/modern-ime-ui.service data/systemd/modern-ime-voice-worker.service
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/systemd/user)
+install(FILES README.md DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/modern-ime)
+install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/modern-ime RENAME copyright)
+install(FILES
+    "${MODERN_IME_GENERATED_DATA_DIR}/systemd/modern-ime-service.service"
+    "${MODERN_IME_GENERATED_DATA_DIR}/systemd/modern-ime-ui.service"
+    "${MODERN_IME_GENERATED_DATA_DIR}/systemd/modern-ime-voice-worker.service"
+    DESTINATION ${MODERN_IME_SYSTEMD_USER_UNIT_DIR})
 
 if(BUILD_TESTING)
     find_package(Catch2 3 REQUIRED)
@@ -126,15 +156,31 @@ if(BUILD_TESTING)
     modern_ime_target_defaults(modern-ime-fcitx-client-smoke)
 
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session REQUIRED)
+    set(MODERN_IME_ISOLATED_DBUS_ARGS --config-file=${CMAKE_SOURCE_DIR}/tests/fixtures/dbus-session-isolated.conf --)
     add_test(NAME modern-ime-candidate-ui-smoke
-        COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:modern-ime-candidate-ui> --smoke-test)
+        COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} ${MODERN_IME_ISOLATED_DBUS_ARGS} $<TARGET_FILE:modern-ime-candidate-ui> --smoke-test)
     set_tests_properties(modern-ime-candidate-ui-smoke PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_SCALE_FACTOR=1.5"
+        TIMEOUT 10)
+    add_test(NAME modern-ime-candidate-ui-voice-error-smoke
+        COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} ${MODERN_IME_ISOLATED_DBUS_ARGS} $<TARGET_FILE:modern-ime-candidate-ui> --smoke-test-voice-error)
+    set_tests_properties(modern-ime-candidate-ui-voice-error-smoke PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        TIMEOUT 10)
+    add_test(NAME modern-ime-settings-smoke
+        COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} ${MODERN_IME_ISOLATED_DBUS_ARGS} $<TARGET_FILE:modern-ime-settings> --smoke-test)
+    set_tests_properties(modern-ime-settings-smoke PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+        TIMEOUT 10)
+    add_test(NAME modern-ime-model-installer-smoke
+        COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} ${MODERN_IME_ISOLATED_DBUS_ARGS} $<TARGET_FILE:modern-ime-settings> --smoke-test-model-installer)
+    set_tests_properties(modern-ime-model-installer-smoke PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;XDG_DATA_DIRS=${CMAKE_SOURCE_DIR}/tests/fixtures/model-installer:/usr/local/share:/usr/share"
         TIMEOUT 10)
     find_program(XVFB_RUN_EXECUTABLE xvfb-run)
     if(XVFB_RUN_EXECUTABLE)
         add_test(NAME modern-ime-candidate-ui-x11-smoke
-            COMMAND ${XVFB_RUN_EXECUTABLE} -a ${DBUS_RUN_SESSION_EXECUTABLE} --
+            COMMAND ${XVFB_RUN_EXECUTABLE} -a ${DBUS_RUN_SESSION_EXECUTABLE} ${MODERN_IME_ISOLATED_DBUS_ARGS}
                     $<TARGET_FILE:modern-ime-candidate-ui> --smoke-test)
         set_tests_properties(modern-ime-candidate-ui-x11-smoke PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=xcb"
@@ -159,3 +205,31 @@ add_custom_target(format
     COMMAND clang-format -i $<TARGET_PROPERTY:modern-ime-contracts,SOURCES> $<TARGET_PROPERTY:modern-ime-language-core,SOURCES>
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Formatting core C++ sources")
+
+if(MODERN_IME_ENABLE_DEB_PACKAGING)
+    if(NOT CMAKE_INSTALL_PREFIX STREQUAL "/usr")
+        message(FATAL_ERROR "Debian packages must be configured with -DCMAKE_INSTALL_PREFIX=/usr")
+    endif()
+    set(CPACK_GENERATOR "DEB")
+    set(CPACK_PACKAGE_NAME "modern-ime")
+    set(CPACK_PACKAGE_VENDOR "Modern IME contributors")
+    set(CPACK_PACKAGE_CONTACT "Modern IME contributors")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Local Fcitx5 Chinese, English, and offline voice input method")
+    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+    set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+    set(CPACK_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
+        OWNER_READ OWNER_WRITE OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE)
+    set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Modern IME contributors")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "x11")
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS
+        "fcitx5 (>= 5.1.7), qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-templates, qml6-module-qtquick-window, qml6-module-qtqml-workerscript, curl, bzip2, ca-certificates")
+    set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "fcitx5-config-qt")
+    set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
+        "${CMAKE_CURRENT_SOURCE_DIR}/packaging/debian/postinst"
+        "${CMAKE_CURRENT_SOURCE_DIR}/packaging/debian/prerm")
+    include(CPack)
+endif()
