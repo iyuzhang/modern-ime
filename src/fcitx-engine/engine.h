@@ -30,7 +30,7 @@ public:
     bool shift_pressed = false;
     bool control_pressed = false;
     bool control_used = false;
-    bool manual_english = false;
+    bool manual_chinese = false;
     bool literal_prefix = false;
     bool literal_passthrough = false;
     std::unique_ptr<fcitx::EventSource> pending_voice_release;

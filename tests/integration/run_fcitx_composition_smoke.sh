@@ -172,22 +172,29 @@ xdotool key --window "$window_id" period
 xdotool type --window "$window_id" --delay 10 git
 xdotool key --window "$window_id" Return
 
-# A short Control press toggles a context-local English override. A normal
-# Control shortcut must mark the modifier as used and must not toggle first.
+# A short Control press disables automatic literal decisions for this input
+# context. A normal Control shortcut must not toggle first.
 xdotool key --window "$window_id" ctrl+c
 xdotool key --window "$window_id" Control_L
-xdotool type --window "$window_id" --delay 10 nihao
-manual_status=$(gdbus call --session \
-  --dest org.modernime.UI1 \
-  --object-path /org/modernime/UI1 \
-  --method org.modernime.UI1.Status 2>/dev/null || true)
-if [[ $manual_status != *'"visible":false'* || $manual_status != *'"preedit":""'* ]]; then
-  printf 'Short Control temporary English unexpectedly opened composition: %s\n' "$manual_status" >&2
+xdotool type --window "$window_id" --delay 10 git
+manual_status=
+for _ in $(seq 1 20); do
+  manual_status=$(gdbus call --session \
+    --dest org.modernime.UI1 \
+    --object-path /org/modernime/UI1 \
+    --method org.modernime.UI1.Status 2>/dev/null || true)
+  if [[ $manual_status == *'"visible":true'* && $manual_status == *'"preedit":"git"'* ]]; then break; fi
+  sleep 0.02
+done
+if [[ $manual_status != *'"visible":true'* || $manual_status != *'"preedit":"git"'* ]]; then
+  printf 'Short Control did not keep git in Chinese composition: %s\n' "$manual_status" >&2
   exit 10
 fi
+xdotool key --window "$window_id" Escape
+xdotool type --window "$window_id" --delay 10 nihao
 xdotool key --window "$window_id" space
 xdotool key --window "$window_id" Control_L
-xdotool type --window "$window_id" --delay 10 nihao
+xdotool type --window "$window_id" --delay 10 git
 xdotool key --window "$window_id" space
 
 # Explicit English mode remains available as a predictable escape hatch and
@@ -208,7 +215,7 @@ wait "$client_pid"
 client_pid=
 result=$(sed -n 's/^RESULT=//p' "$smoke_root/client.log")
 return_count=$(sed -n 's/^RETURN_COUNT=//p' "$smoke_root/client.log")
-expected='妙控触摸板妙控触摸板 git status ls, ll React std::vector main make sha256 你好/usr/local/bin --help 你好.gitnihao 你好EnglishMode'
+expected='妙控触摸板妙控触摸板 git status ls, ll React std::vector main make sha256 你好/usr/local/bin --help 你好.git 你好 git EnglishMode'
 if [[ $result != "$expected" ]]; then
   printf 'Expected %s, got %s\n' "$expected" "$result" >&2
   cat "$smoke_root/fcitx.log" >&2

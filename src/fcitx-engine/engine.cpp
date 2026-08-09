@@ -118,8 +118,8 @@ ModernEngine::ModernEngine(fcitx::Instance *instance) : instance_(instance), fac
     reloadConfig();
 }
 CompositionState *ModernEngine::state(fcitx::InputContext *context) { return context->propertyFor(&factory_); }
-void ModernEngine::activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) { auto *context = event.inputContext(); auto *current = state(context); current->focus_generation++; if (config_.input_mode != InputMode::Auto) current->manual_english = false; applyConfig(current); installInputPanelCallback(context); }
-void ModernEngine::reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) { auto *current = state(event.inputContext()); current->f8_pressed = false; current->shift_pressed = false; current->control_pressed = false; current->control_used = false; current->manual_english = false; current->pending_voice_release.reset(); current->pending_voice_commit.reset(); cancelVoice(event.inputContext()); clear(event.inputContext()); }
+void ModernEngine::activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) { auto *context = event.inputContext(); auto *current = state(context); current->focus_generation++; if (config_.input_mode != InputMode::Auto) current->manual_chinese = false; applyConfig(current); installInputPanelCallback(context); }
+void ModernEngine::reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) { auto *current = state(event.inputContext()); current->f8_pressed = false; current->shift_pressed = false; current->control_pressed = false; current->control_used = false; current->manual_chinese = false; current->pending_voice_release.reset(); current->pending_voice_commit.reset(); cancelVoice(event.inputContext()); clear(event.inputContext()); }
 std::string ModernEngine::subMode(const fcitx::InputMethodEntry &, fcitx::InputContext &context) {
     if (effectiveInputMode(state(&context)) == InputMode::English) return "英";
     if (effectiveInputMode(state(&context)) == InputMode::Chinese) return "中";
@@ -157,7 +157,7 @@ void ModernEngine::publish(fcitx::InputContext *context, bool visible) {
     snapshot.sequence = ++next_sequence_;
     snapshot.preedit = current->selected_text + current->buffer;
     const auto mode = effectiveInputMode(current);
-    snapshot.mode = mode == InputMode::Auto ? "智能" : mode == InputMode::English ? (current->manual_english ? "临时英文" : "英文") : "中文";
+    snapshot.mode = mode == InputMode::Auto ? "智能" : mode == InputMode::English ? "英文" : current->manual_chinese ? "临时中文" : "中文";
     snapshot.layout = current->candidate_layout;
     snapshot.visible = visible;
     const auto list = context->inputPanel().candidateList();
@@ -216,7 +216,7 @@ void ModernEngine::applyConfig(CompositionState *current) const {
     current->candidate_layout = config_.layout;
 }
 InputMode ModernEngine::effectiveInputMode(const CompositionState *current) const {
-    return config_.input_mode == InputMode::Auto && current && current->manual_english ? InputMode::English : config_.input_mode;
+    return config_.input_mode == InputMode::Auto && current && current->manual_chinese ? InputMode::Chinese : config_.input_mode;
 }
 InputContextFeatures ModernEngine::inputFeatures(fcitx::InputContext *context, const CompositionState *current) const {
     InputContextFeatures result;
@@ -355,12 +355,11 @@ void ModernEngine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &ev
         current->control_pressed = false;
         current->control_used = false;
         if (shortPress && config_.control_mode_toggle && config_.input_mode == InputMode::Auto) {
-            current->manual_english = !current->manual_english;
-            if (current->manual_english && (!current->selected_text.empty() || !current->buffer.empty())) {
-                context->commitString(withContextSpacing(context, language_.normalizeForCommit(current->selected_text + current->buffer), config_.insert_spacing));
-            }
+            current->manual_chinese = !current->manual_chinese;
+            current->literal_passthrough = false;
             if (!current->voice_session_id.empty()) cancelVoice(context);
-            clear(context);
+            if (!current->buffer.empty() || !current->selected_text.empty()) update(context);
+            else clear(context);
             context->updateUserInterface(fcitx::UserInterfaceComponent::StatusArea);
         }
         return;
@@ -448,7 +447,7 @@ void ModernEngine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &ev
     }
     if (matchesHotkey(event, config_.commit_raw_hotkey)) {
         if (!current->buffer.empty()) {
-            const bool fluentLiteral = config_.input_mode == InputMode::Auto && !current->candidates.empty() && current->candidates.front().literal;
+            const bool fluentLiteral = effectiveInputMode(current) == InputMode::Auto && !current->candidates.empty() && current->candidates.front().literal;
             QDBusInterface service(QStringLiteral("org.modernime.Service1"), QStringLiteral("/org/modernime/Service1"), QStringLiteral("org.modernime.Service1"), QDBusConnection::sessionBus());
             service.asyncCall(QStringLiteral("RecordInputPreference"), QString::fromUtf8(current->buffer), QString::fromUtf8(inputFeatures(context, current).scope), true);
             context->commitString(withContextSpacing(context, language_.normalizeForCommit(current->selected_text + current->buffer), config_.insert_spacing));
@@ -475,7 +474,7 @@ void ModernEngine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &ev
     if (isLiteralWordCharacter(key)) {
         const bool letter = key.isLAZ() || key.isUAZ();
         if (current->buffer.empty() && !letter) {
-            if (config_.input_mode == InputMode::Auto && startsLiteralPrefix(key)) current->literal_prefix = true;
+            if (effectiveInputMode(current) == InputMode::Auto && startsLiteralPrefix(key)) current->literal_prefix = true;
             return;
         }
         const auto text = fcitx::Key::keySymToUTF8(key.sym());
@@ -491,7 +490,7 @@ void ModernEngine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &ev
         }
     }
     if (current->buffer.empty()) {
-        if (key.digitSelection() >= 0 && config_.input_mode == InputMode::Auto) current->literal_prefix = true;
+        if (key.digitSelection() >= 0 && effectiveInputMode(current) == InputMode::Auto) current->literal_prefix = true;
         else if (key.check(FcitxKey_BackSpace) || key.check(FcitxKey_space)) current->literal_prefix = false;
         return;
     }
@@ -501,7 +500,7 @@ void ModernEngine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &ev
         const auto *choice = candidateData(candidateList, selected);
         const bool literal = choice && choice->literal;
         candidateList->candidate(selected).select(context);
-        if (literal && config_.input_mode == InputMode::Auto) context->commitString(" ");
+        if (literal && effectiveInputMode(current) == InputMode::Auto) context->commitString(" ");
         event.filterAndAccept();
         return;
     }

@@ -86,7 +86,7 @@ struct ConfigSnapshot {
     // clients, but input_mode is authoritative when present.
     InputMode input_mode = InputMode::Auto;
     bool chinese_mode = true;
-    // A short Control press toggles a context-local English override in Auto
+    // A short Control press toggles a context-local Chinese override in Auto
     // mode. Control combined with another key remains a normal modifier.
     bool control_mode_toggle = true;
     bool insert_spacing = true;
