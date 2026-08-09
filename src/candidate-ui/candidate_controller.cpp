@@ -41,7 +41,7 @@ CandidateController::CandidateController(QObject *parent) : QObject(parent) {
 }
 bool CandidateController::visible() const { return visible_; }
 QString CandidateController::preedit() const { return voice_.state == VoiceState::Idle ? QString::fromUtf8(snapshot_.preedit) : QString{}; }
-QString CandidateController::mode() const { if (voice_.state == VoiceState::Listening) return QStringLiteral("● 聆听中"); if (voice_.state == VoiceState::Finalizing) return QStringLiteral("⌛ 识别中"); if (voice_.state == VoiceState::Review) return QStringLiteral("✓ 识别完成"); if (voice_.state == VoiceState::Error) return QStringLiteral("! 语音错误"); return {}; }
+QString CandidateController::mode() const { if (voice_.state == VoiceState::Listening) return QStringLiteral("● 聆听中"); if (voice_.state == VoiceState::Finalizing) return QStringLiteral("⌛ 识别中"); if (voice_.state == VoiceState::Review) return QStringLiteral("✓ 识别完成"); if (voice_.state == VoiceState::Error) return QStringLiteral("! 语音错误"); return QString::fromUtf8(snapshot_.mode); }
 QVariantList CandidateController::candidates() const {
     QVariantList result;
     const bool showingVoice = voice_.state == VoiceState::Listening || voice_.state == VoiceState::Finalizing || voice_.state == VoiceState::Review || voice_.state == VoiceState::Error;
@@ -54,7 +54,7 @@ QVariantList CandidateController::candidates() const {
         items = &voiceItems;
     }
     int index = 0;
-    for (const auto &candidate : *items) result.push_back(QVariantMap{{QStringLiteral("number"), index++ + 1}, {QStringLiteral("text"), QString::fromUtf8(candidate.text)}, {QStringLiteral("annotation"), showingVoice ? QString::fromUtf8(candidate.annotation) : QString{}}, {QStringLiteral("pinned"), candidate.pinned}});
+    for (const auto &candidate : *items) result.push_back(QVariantMap{{QStringLiteral("number"), index++ + 1}, {QStringLiteral("text"), QString::fromUtf8(candidate.text)}, {QStringLiteral("annotation"), showingVoice || candidate.literal || candidate.pinned ? QString::fromUtf8(candidate.annotation) : QString{}}, {QStringLiteral("pinned"), candidate.pinned}});
     return result;
 }
 int CandidateController::selected() const { return snapshot_.selected; }

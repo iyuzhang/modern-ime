@@ -24,6 +24,7 @@ namespace {
 constexpr float kBluetoothInputGain = 4.0F;
 constexpr float kSpeechLevel = 0.003F;
 constexpr qint64 kStreamReadyTimeoutMs = 3'000;
+constexpr qint64 kPreviewPunctuationIntervalMs = 600;
 
 const pw_stream_events kStreamEvents = [] {
     pw_stream_events events{};
@@ -311,12 +312,32 @@ void VoiceWorker::closePunctuation() {
 }
 
 std::string VoiceWorker::punctuate(const std::string &text) {
-    if (text.empty() || !punctuation_) return text;
+    if (text.empty()) return {};
+    if (!punctuation_) return finalizeVoiceTranscript(text);
     const auto *result = sherpa_.addOfflinePunctuation(punctuation_, text.c_str());
-    if (!result) return text;
+    if (!result) return finalizeVoiceTranscript(text);
     std::string output(result);
     sherpa_.freeOfflinePunctuationText(result);
-    return output.empty() ? text : output;
+    return finalizeVoiceTranscript(output.empty() ? text : output);
+}
+
+std::string VoiceWorker::punctuatePreview(const std::string &text) {
+    if (text.empty()) return {};
+    QElapsedTimer timer;
+    timer.start();
+    if (!punctuation_) {
+        preview_punctuation_ms_.store(timer.elapsed(), std::memory_order_relaxed);
+        return previewVoiceTranscript(text);
+    }
+    const auto *result = sherpa_.addOfflinePunctuation(punctuation_, text.c_str());
+    if (!result) {
+        preview_punctuation_ms_.store(timer.elapsed(), std::memory_order_relaxed);
+        return previewVoiceTranscript(text);
+    }
+    std::string output(result);
+    sherpa_.freeOfflinePunctuationText(result);
+    preview_punctuation_ms_.store(timer.elapsed(), std::memory_order_relaxed);
+    return previewVoiceTranscript(output.empty() ? text : output);
 }
 
 void VoiceWorker::closeRecognitionStream() {
@@ -391,6 +412,10 @@ bool VoiceWorker::Start(const QString &sessionId, qulonglong focusGeneration) {
     audio_overrun_ = false;
     vad_speech_detected_ = false;
     transcript_.clear();
+    preview_source_.clear();
+    preview_text_.clear();
+    preview_punctuation_timer_.invalidate();
+    preview_punctuation_ms_.store(-1, std::memory_order_relaxed);
     final_result_.clear();
     publish(VoiceState::Starting);
     if (source_.contains(QStringLiteral(".monitor"))) {
@@ -433,7 +458,7 @@ bool VoiceWorker::Stop(const QString &sessionId) {
     if (!listening_ || sessionId != session_id_) return false;
     QElapsedTimer finalizationTimer;
     finalizationTimer.start();
-    publish(VoiceState::Finalizing);
+    publish(VoiceState::Finalizing, preview_text_.empty() ? previewVoiceTranscript(transcript_) : preview_text_);
     if (!setStreamActive(false)) closeStream();
     decodeAudio(0);
     sherpa_.inputFinished(recognition_stream_);
@@ -468,6 +493,9 @@ bool VoiceWorker::Cancel(const QString &sessionId) {
     meter_timer_.stop();
     listening_ = false;
     transcript_.clear();
+    preview_source_.clear();
+    preview_text_.clear();
+    preview_punctuation_timer_.invalidate();
     final_result_.clear();
     publish(VoiceState::Idle);
     return true;
@@ -500,6 +528,7 @@ QString VoiceWorker::Status() {
     value.insert(QStringLiteral("warmup_ms"), warmup_ms_.load(std::memory_order_relaxed));
     value.insert(QStringLiteral("start_latency_ms"), start_latency_ms_.load(std::memory_order_relaxed));
     value.insert(QStringLiteral("finalization_ms"), finalization_ms_.load(std::memory_order_relaxed));
+    value.insert(QStringLiteral("preview_punctuation_ms"), preview_punctuation_ms_.load(std::memory_order_relaxed));
     value.insert(QStringLiteral("last_result_chars"), last_result_chars_.load(std::memory_order_relaxed));
     const int lastError = last_error_.load(std::memory_order_relaxed);
     value.insert(QStringLiteral("last_error"), lastError < 0 ? QString{} : QString::fromStdString(errorCodeName(static_cast<ErrorCode>(lastError))));
@@ -509,7 +538,13 @@ QString VoiceWorker::Status() {
 void VoiceWorker::publishMeter() {
     if (!listening_) return;
     decodeAudio(3);
-    publish(VoiceState::Listening, transcript_);
+    const bool punctuationDue = !preview_punctuation_timer_.isValid() || preview_punctuation_timer_.elapsed() >= kPreviewPunctuationIntervalMs;
+    if (transcript_ != preview_source_ && punctuationDue) {
+        preview_source_ = transcript_;
+        preview_text_ = punctuatePreview(transcript_);
+        preview_punctuation_timer_.restart();
+    }
+    publish(VoiceState::Listening, preview_text_.empty() ? transcript_ : preview_text_);
 }
 
 void VoiceWorker::process(void *data) {

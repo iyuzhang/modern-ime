@@ -1,7 +1,7 @@
 [Unit]
 Description=Modern IME candidate window
 After=graphical-session.target modern-ime-service.service
-PartOf=modern-ime-service.service
+PartOf=graphical-session.target
 
 [Service]
 Type=simple
@@ -10,4 +10,4 @@ Restart=on-failure
 RestartSec=1
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target

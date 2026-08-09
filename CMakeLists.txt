@@ -88,7 +88,7 @@ add_library(modern-ime-engine-addon MODULE
     src/fcitx-engine/engine_factory.cpp
 )
 set_target_properties(modern-ime-engine-addon PROPERTIES PREFIX "lib" OUTPUT_NAME "modernime")
-target_link_libraries(modern-ime-engine-addon PRIVATE modern-ime-language-core Qt6::Core Qt6::DBus Fcitx5::Core)
+target_link_libraries(modern-ime-engine-addon PRIVATE modern-ime-language-core Qt6::Core Qt6::DBus Fcitx5::Core Fcitx5::Utils)
 modern_ime_target_defaults(modern-ime-engine-addon)
 
 add_library(modern-ime-ui-addon MODULE src/fcitx-ui-bridge/ui_bridge.cpp)
@@ -139,6 +139,18 @@ if(BUILD_TESTING)
         set_tests_properties(modern-ime-candidate-ui-x11-smoke PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=xcb"
             TIMEOUT 10)
+        find_program(XDOTOOL_EXECUTABLE xdotool)
+        if(XDOTOOL_EXECUTABLE)
+            add_test(NAME modern-ime-fcitx-composition-smoke
+                COMMAND ${XVFB_RUN_EXECUTABLE} -a ${DBUS_RUN_SESSION_EXECUTABLE} --
+                        bash ${CMAKE_SOURCE_DIR}/tests/integration/run_fcitx_composition_smoke.sh
+                        ${CMAKE_SOURCE_DIR}
+                        $<TARGET_FILE:modern-ime-engine-addon>
+                        $<TARGET_FILE:modern-ime-fcitx-client-smoke>
+                        $<TARGET_FILE:modern-ime-candidate-ui>
+                        $<TARGET_FILE:modern-ime-service>)
+            set_tests_properties(modern-ime-fcitx-composition-smoke PROPERTIES TIMEOUT 20)
+        endif()
     endif()
     add_test(NAME modern-ime-keyboard-latency COMMAND modern-ime-latency-benchmark)
 endif()

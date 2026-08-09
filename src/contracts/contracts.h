@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -28,6 +29,7 @@ enum class ErrorCode {
 
 enum class VoiceState { Idle, Starting, Listening, Finalizing, Review, Committing, Error };
 enum class VoiceTriggerMode { PushToTalk, Toggle };
+enum class InputMode { Auto, Chinese, English };
 enum class CandidateLayout { Horizontal, Vertical };
 enum class CandidateTheme {
     Midnight,
@@ -49,6 +51,11 @@ struct Candidate {
     std::string annotation;
     bool pinned = false;
     bool literal = false;
+    // Number of bytes consumed from the current ASCII reading. This is
+    // engine-local metadata and is intentionally not part of UI snapshots.
+    // libime emits both whole-sentence and prefix candidates; preserving the
+    // endpoint lets the engine keep the unselected suffix in composition.
+    size_t consumed_input = 0;
 };
 
 struct CandidateSnapshot {
@@ -74,7 +81,14 @@ struct CandidateSnapshot {
 struct ConfigSnapshot {
     uint32_t protocol_version = kProtocolVersion;
     uint64_t version = 1;
+    // Auto keeps Chinese conversion and literal developer tokens in one
+    // composition. The legacy boolean remains on the wire for older settings
+    // clients, but input_mode is authoritative when present.
+    InputMode input_mode = InputMode::Auto;
     bool chinese_mode = true;
+    // A short Control press toggles a context-local English override in Auto
+    // mode. Control combined with another key remains a normal modifier.
+    bool control_mode_toggle = true;
     bool insert_spacing = true;
     int candidate_count = 7;
     CandidateLayout layout = CandidateLayout::Horizontal;
@@ -127,6 +141,15 @@ struct Lexeme {
     int64_t last_selected_at = 0;
 };
 
+struct InputPreference {
+    std::string token;
+    std::string scope;
+    uint64_t literal_count = 0;
+    uint64_t chinese_count = 0;
+    int64_t last_selected_at = 0;
+    bool last_literal = false;
+};
+
 std::string serialize(const CandidateSnapshot &snapshot);
 std::optional<CandidateSnapshot> parseCandidateSnapshot(std::string_view value);
 std::string serialize(const ConfigSnapshot &snapshot);
@@ -136,5 +159,11 @@ std::optional<VoiceEvent> parseVoiceEvent(std::string_view value);
 std::string errorCodeName(ErrorCode code);
 std::string voiceStateName(VoiceState state);
 std::string escapeJson(std::string_view value);
+// Normalizes the final ASR result and guarantees a sentence boundary when the
+// statistical punctuation model leaves a non-empty utterance unpunctuated.
+std::string finalizeVoiceTranscript(std::string_view value);
+// Normalizes a live ASR preview while removing unstable trailing punctuation.
+// Internal punctuation restored by the model is retained.
+std::string previewVoiceTranscript(std::string_view value);
 
 } // namespace modernime

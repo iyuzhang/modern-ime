@@ -9,6 +9,7 @@
     <method name="DeleteLexeme"><arg name="id" type="x" direction="in"/><arg name="success" type="b" direction="out"/></method>
     <method name="ClearLearned"><arg name="success" type="b" direction="out"/></method>
     <method name="RecordSelection"><arg name="reading" type="s" direction="in"/><arg name="output" type="s" direction="in"/><arg name="success" type="b" direction="out"/></method>
+    <method name="RecordInputPreference"><arg name="token" type="s" direction="in"/><arg name="scope" type="s" direction="in"/><arg name="literal" type="b" direction="in"/><arg name="success" type="b" direction="out"/></method>
     <method name="ExportLexicon"><arg name="serialized" type="s" direction="out"/></method>
     <method name="ImportLexicon"><arg name="serialized" type="s" direction="in"/><arg name="success" type="b" direction="out"/></method>
     <method name="Diagnostics"><arg name="serialized" type="s" direction="out"/></method>
@@ -20,6 +21,7 @@
     <method name="CancelVoice"><arg name="session_id" type="s" direction="in"/><arg name="success" type="b" direction="out"/></method>
     <method name="GetVoiceResult"><arg name="session_id" type="s" direction="in"/><arg name="serialized" type="s" direction="out"/></method>
     <signal name="ConfigChanged"><arg name="version" type="t"/><arg name="serialized" type="s"/></signal>
+    <signal name="LexiconChanged"/>
     <signal name="VoiceUpdated"><arg name="serialized" type="s"/></signal>
   </interface>
 </node>

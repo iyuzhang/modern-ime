@@ -4,6 +4,7 @@
 #include "voice-worker/sherpa_api.h"
 
 #include <QObject>
+#include <QElapsedTimer>
 #include <QTimer>
 
 #include <pipewire/pipewire.h>
@@ -50,6 +51,7 @@ private:
     bool openPunctuation();
     void closePunctuation();
     std::string punctuate(const std::string &text);
+    std::string punctuatePreview(const std::string &text);
     void closeRecognitionStream();
     void closeRecognizer();
     void decodeAudio(size_t maximumChunks);
@@ -75,6 +77,7 @@ private:
     std::atomic<qint64> warmup_ms_{-1};
     std::atomic<qint64> start_latency_ms_{-1};
     std::atomic<qint64> finalization_ms_{-1};
+    std::atomic<qint64> preview_punctuation_ms_{-1};
     std::atomic<int> last_result_chars_{0};
     std::atomic<int> last_error_{-1};
     bool vad_speech_detected_ = false;
@@ -82,6 +85,9 @@ private:
     std::array<float, kAudioRingFrames> audio_ring_{};
     std::array<float, kDecodeChunkFrames> decode_buffer_{};
     std::string transcript_;
+    std::string preview_source_;
+    std::string preview_text_;
+    QElapsedTimer preview_punctuation_timer_;
     QString final_result_;
     bool listening_ = false;
     pw_thread_loop *loop_ = nullptr;

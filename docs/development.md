@@ -7,7 +7,7 @@
 Ubuntu 开发依赖：
 
 ```bash
-sudo apt install cmake ninja-build g++ pkg-config catch2 xvfb \
+sudo apt install cmake ninja-build g++ pkg-config catch2 xvfb xdotool desktop-file-utils \
   qt6-base-dev qt6-declarative-dev \
   qml6-module-qtquick-controls qml6-module-qtqml-workerscript \
   qml6-module-qtquick-layouts qml6-module-qtquick-templates \
@@ -38,6 +38,7 @@ CTest 当前包含：
 - 核心候选、词库和契约单元测试。
 - offscreen Qt + 150% 缩放的候选窗 smoke test。
 - Xvfb/xcb 候选窗层级和无焦点 smoke test。
+- 私有 Xvfb、D-Bus 和 Fcitx 会话中的真实 Qt 客户端端到端测试：覆盖连续组句、整句学习和运行中词库热更新；同一会话还输入 `git status`、`ls, ll`、`React`、`std::vector`、`main`、路径、命令参数和普通拼音，验证命令自动提交后候选窗隐藏、词元内英文直通、短按 Ctrl 临时英文/恢复智能、Ctrl 组合键不误切、边界恢复、原文回车透传、中文标点、中英文间距及显式英文直输。
 - 键盘候选 P95 延迟门槛。
 
 `modern-ime-asr-smoke` 需要已安装模型，用于固定音频的离线识别、标点、RTF 和 CER 检查，不属于默认 CTest。示例：
@@ -47,7 +48,9 @@ modern-ime-asr-smoke --wav sample.wav --expected '参考文本' --max-cer 0.15 -
 modern-ime-asr-smoke --wav sample.wav --hotwords ~/.local/share/modern-ime/voice-hotwords.txt --json
 ```
 
-测试语料必须由用户明确授权录制；运行时不会保存麦克风音频。推广前的语音发布门槛应包含：首句不丢、短词/长句、静音、背景噪声、蓝牙重连、连续 100 次会话、CER 和 RTF。
+默认普通话模型自带的 `test_wavs/0.wav` 可用于安装完整性回归；当前部署可按[上游公开解码结果](https://github.com/k2-fsa/sherpa/blob/master/docs/source/onnx/pretrained_models/online-transducer/code-zipformer/sherpa-onnx-streaming-zipformer-zh-int8-2025-06-30.txt)通过 `--max-cer 0` 并恢复内部逗号和句末句号。该检查只能证明模型、运行时和最终标点链路没有退化，不能替代真实用户语料，也不覆盖流式候选的刷新节奏。
+
+测试语料必须由用户明确授权录制；运行时不会保存麦克风音频。推广前的语音发布门槛应包含：首句不丢、短词/长句、流式与最终标点、静音、背景噪声、蓝牙重连、连续 100 次会话、CER 和 RTF。
 
 ## 安装
 
@@ -56,6 +59,8 @@ modern-ime-asr-smoke --wav sample.wav --hotwords ~/.local/share/modern-ime/voice
 ```
 
 脚本会重新构建和测试、备份现有部署文件、安装用户程序和 systemd user service，并下载经过 SHA-256 校验的 sherpa-onnx 1.13.2、2025 普通话 Zipformer、Silero VAD 和中英标点模型。设置 `MODERN_IME_SKIP_MODEL=1` 可跳过模型下载。模型布局由各目录的 `model.json` 声明并限制为目录内文件，避免在 worker 中继续硬编码文件名。
+
+安装脚本还会把设置程序的桌面启动器改写为当前用户前缀下的绝对路径并刷新桌面应用数据库；不要把它退回为依赖图形会话 `PATH` 的裸 `Exec=modern-ime-settings`。部署后可用 `desktop-file-validate ~/.local/share/applications/modern-ime-settings.desktop` 和 `QT_QPA_PLATFORM=offscreen timeout 3 modern-ime-settings` 做无窗口启动检查（后者预期由 `timeout` 结束）。
 
 当前 Fcitx5 从系统 ABI 目录加载插件，因此脚本需要 `sudo -n` 安装 `libmodernime.so` 和 `libmodernimeui.so`。后续应改为发行包或验证可靠的纯用户插件发现方式。
 

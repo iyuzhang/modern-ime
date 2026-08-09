@@ -12,10 +12,12 @@ int main(int argc, char **argv) {
     component.setData(R"qml(
         import QtQuick 2.15
         Rectangle {
+            id: root
             width: 480
             height: 120
             color: "white"
             property alias enteredText: editor.text
+            property int forwardedReturns: 0
             TextInput {
                 id: editor
                 anchors.fill: parent
@@ -23,6 +25,10 @@ int main(int argc, char **argv) {
                 focus: true
                 font.pixelSize: 28
                 color: "black"
+                Keys.onReturnPressed: function(event) {
+                    root.forwardedReturns += 1
+                    event.accepted = true
+                }
             }
         }
     )qml", QUrl(QStringLiteral("qrc:/modern-ime-fcitx-smoke.qml")));
@@ -36,6 +42,7 @@ int main(int argc, char **argv) {
     view.show();
     QTimer::singleShot(5'000, &app, [&] {
         std::cout << "RESULT=" << root->property("enteredText").toString().toStdString() << '\n';
+        std::cout << "RETURN_COUNT=" << root->property("forwardedReturns").toInt() << '\n';
         app.quit();
     });
     return app.exec();

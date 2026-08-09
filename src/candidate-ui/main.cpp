@@ -11,6 +11,10 @@
 #include <algorithm>
 
 int main(int argc, char **argv) {
+    // The candidate popup is a background component managed by systemd and
+    // the engine's on-demand recovery. Desktop session restoration would
+    // launch a second copy at login and race it for the D-Bus service name.
+    QGuiApplication::setAttribute(Qt::AA_DisableSessionManager);
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("modern-ime-candidate-ui"));
     QCommandLineParser parser;

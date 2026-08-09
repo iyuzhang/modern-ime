@@ -207,6 +207,7 @@ QString Service::UpsertLexeme(const QString &serialized) {
         language_.refreshUserLexicon();
         refreshVoiceHotwords();
         restartVoiceWorkerForModelConfig();
+        emit LexiconChanged();
     }
     return persisted ? lexemeJson(*persisted) : QString{};
 }
@@ -216,6 +217,7 @@ bool Service::DeleteLexeme(qlonglong id) {
         language_.refreshUserLexicon();
         refreshVoiceHotwords();
         restartVoiceWorkerForModelConfig();
+        emit LexiconChanged();
     }
     return result;
 }
@@ -225,6 +227,7 @@ bool Service::ClearLearned() {
         language_.refreshUserLexicon();
         refreshVoiceHotwords();
         restartVoiceWorkerForModelConfig();
+        emit LexiconChanged();
     }
     return result;
 }
@@ -234,12 +237,22 @@ bool Service::RecordSelection(const QString &reading, const QString &output) {
     const bool result = language_.lexicon().recordSelection(readingValue, outputValue);
     if (!result) return false;
     language_.refreshUserLexicon();
+    emit LexiconChanged();
     const auto entries = language_.lexicon().matching(readingValue);
     if (std::any_of(entries.cbegin(), entries.cend(), [&outputValue](const Lexeme &entry) { return entry.output == outputValue && voiceHotwordForLexeme(entry).has_value(); })) voice_hotword_refresh_timer_.start();
     return true;
 }
+bool Service::RecordInputPreference(const QString &token, const QString &scope, bool literal) {
+    const auto normalizedToken = token.trimmed().toLower();
+    const auto normalizedScope = scope.trimmed().toLower();
+    const bool result = language_.lexicon().recordInputPreference(toString(normalizedToken), toString(normalizedScope), literal);
+    if (!result) return false;
+    language_.refreshUserLexicon();
+    emit LexiconChanged();
+    return true;
+}
 QString Service::ExportLexicon() { return toQString(language_.lexicon().exportJson()); }
-bool Service::ImportLexicon(const QString &serialized) { std::string reason; const bool result = language_.lexicon().importJson(toString(serialized), &reason); if (result) { language_.refreshUserLexicon(); refreshVoiceHotwords(); restartVoiceWorkerForModelConfig(); } else logError("service", reason); return result; }
+bool Service::ImportLexicon(const QString &serialized) { std::string reason; const bool result = language_.lexicon().importJson(toString(serialized), &reason); if (result) { language_.refreshUserLexicon(); refreshVoiceHotwords(); restartVoiceWorkerForModelConfig(); emit LexiconChanged(); } else logError("service", reason); return result; }
 QString Service::Diagnostics() {
     const auto config = paths_.config; const auto data = paths_.data; const auto state = paths_.state;
     QDBusInterface controller(QStringLiteral("org.fcitx.Fcitx5"), QStringLiteral("/controller"), QStringLiteral("org.fcitx.Fcitx.Controller1"));
@@ -337,7 +350,11 @@ bool Service::ensureVoiceWorker() {
     return false;
 }
 void Service::prewarmVoiceWorker() {
-    if (config_.microphone.empty() || !ensureVoiceWorker()) return;
+    // Do not keep the large ASR model resident for a disconnected Bluetooth
+    // microphone. StartVoice performs the same availability check and will
+    // start capture before a cold model load after the device reconnects, so
+    // this saves idle memory without dropping the beginning of that phrase.
+    if (config_.microphone.empty() || !selectedMicrophoneAvailable() || !ensureVoiceWorker()) return;
     QDBusInterface worker(QStringLiteral("org.modernime.VoiceWorker1"), QStringLiteral("/org/modernime/VoiceWorker1"), QStringLiteral("org.modernime.VoiceWorker1"));
     worker.setTimeout(5'000);
     worker.asyncCall(QStringLiteral("Warmup"));

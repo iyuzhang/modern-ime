@@ -25,6 +25,7 @@ public slots:
     bool DeleteLexeme(qlonglong id);
     bool ClearLearned();
     bool RecordSelection(const QString &reading, const QString &output);
+    bool RecordInputPreference(const QString &token, const QString &scope, bool literal);
     QString ExportLexicon();
     bool ImportLexicon(const QString &serialized);
     QString Diagnostics();
@@ -39,6 +40,7 @@ public slots:
 
 signals:
     void ConfigChanged(qulonglong version, const QString &serialized);
+    void LexiconChanged();
     void VoiceUpdated(const QString &serialized);
 
 private slots:

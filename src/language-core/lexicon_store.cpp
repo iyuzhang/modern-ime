@@ -16,6 +16,7 @@ int64_t nowSeconds() { return std::chrono::duration_cast<std::chrono::seconds>(s
 void bindText(sqlite3_stmt *statement, int index, std::string_view value) { const char *data = value.empty() ? "" : value.data(); sqlite3_bind_text(statement, index, data, static_cast<int>(value.size()), SQLITE_TRANSIENT); }
 std::string columnText(sqlite3_stmt *statement, int index) { const auto *value = reinterpret_cast<const char *>(sqlite3_column_text(statement, index)); return value ? value : ""; }
 Lexeme row(sqlite3_stmt *statement) { return {sqlite3_column_int64(statement, 0), columnText(statement, 1), columnText(statement, 2), columnText(statement, 3), columnText(statement, 4), sqlite3_column_int(statement, 5) != 0, sqlite3_column_int(statement, 6) != 0, sqlite3_column_double(statement, 7), static_cast<uint64_t>(sqlite3_column_int64(statement, 8)), sqlite3_column_int64(statement, 9)}; }
+InputPreference preferenceRow(sqlite3_stmt *statement) { return {columnText(statement, 0), columnText(statement, 1), static_cast<uint64_t>(sqlite3_column_int64(statement, 2)), static_cast<uint64_t>(sqlite3_column_int64(statement, 3)), sqlite3_column_int64(statement, 4), sqlite3_column_int(statement, 5) != 0}; }
 QString asQString(std::string_view value) { return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size())); }
 std::string asString(const QString &value) { return value.toUtf8().toStdString(); }
 
@@ -34,13 +35,26 @@ bool LexiconStore::execute(const char *sql) const { char *error = nullptr; if (!
 
 bool LexiconStore::migrate() {
     std::scoped_lock lock(mutex_);
-    return execute("BEGIN IMMEDIATE;"
+    if (!execute("BEGIN IMMEDIATE;"
                    "CREATE TABLE IF NOT EXISTS schema_meta (schema_version INTEGER NOT NULL, created_at INTEGER NOT NULL);"
-                   "INSERT INTO schema_meta (schema_version, created_at) SELECT 1, strftime('%s','now') WHERE NOT EXISTS (SELECT 1 FROM schema_meta);"
+                   "INSERT INTO schema_meta (schema_version, created_at) SELECT 3, strftime('%s','now') WHERE NOT EXISTS (SELECT 1 FROM schema_meta);"
                    "CREATE TABLE IF NOT EXISTS lexeme (id INTEGER PRIMARY KEY, reading TEXT NOT NULL, output TEXT NOT NULL, language_tag TEXT NOT NULL DEFAULT 'und', kind TEXT NOT NULL CHECK(kind IN ('manual','learned','replacement')), pinned INTEGER NOT NULL DEFAULT 0, blocked INTEGER NOT NULL DEFAULT 0, base_weight REAL NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE(reading, output));"
                    "CREATE TABLE IF NOT EXISTS selection_stat (lexeme_id INTEGER PRIMARY KEY REFERENCES lexeme(id) ON DELETE CASCADE, select_count INTEGER NOT NULL DEFAULT 0, last_selected_at INTEGER NOT NULL DEFAULT 0, negative_count INTEGER NOT NULL DEFAULT 0);"
                    "CREATE INDEX IF NOT EXISTS lexeme_reading_index ON lexeme(reading);"
-                   "COMMIT;");
+                   "CREATE TABLE IF NOT EXISTS input_preference (token TEXT NOT NULL, scope TEXT NOT NULL DEFAULT '', literal_count INTEGER NOT NULL DEFAULT 0, chinese_count INTEGER NOT NULL DEFAULT 0, last_selected_at INTEGER NOT NULL DEFAULT 0, last_literal INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(token,scope)) WITHOUT ROWID;"
+                   "COMMIT;")) return false;
+    bool hasLastLiteral = false;
+    sqlite3_stmt *statement = nullptr;
+    if (sqlite3_prepare_v2(database_handle_, "PRAGMA table_info(input_preference)", -1, &statement, nullptr) != SQLITE_OK) {
+        setError(sqlite3_errmsg(database_handle_));
+        return false;
+    }
+    while (sqlite3_step(statement) == SQLITE_ROW) {
+        if (columnText(statement, 1) == "last_literal") hasLastLiteral = true;
+    }
+    sqlite3_finalize(statement);
+    if (!hasLastLiteral && !execute("ALTER TABLE input_preference ADD COLUMN last_literal INTEGER NOT NULL DEFAULT 0")) return false;
+    return execute("UPDATE schema_meta SET schema_version=3 WHERE schema_version<3");
 }
 
 std::vector<Lexeme> LexiconStore::list(std::string_view query) const {
@@ -55,6 +69,21 @@ std::vector<Lexeme> LexiconStore::matching(std::string_view reading) const {
     sqlite3_stmt *statement = nullptr; if (sqlite3_prepare_v2(database_handle_, sql, -1, &statement, nullptr) != SQLITE_OK) { setError(sqlite3_errmsg(database_handle_)); return result; } bindText(statement, 1, reading); while (sqlite3_step(statement) == SQLITE_ROW) result.push_back(row(statement)); sqlite3_finalize(statement); return result;
 }
 
+std::vector<InputPreference> LexiconStore::inputPreferences() const {
+    std::scoped_lock lock(mutex_);
+    std::vector<InputPreference> result;
+    if (!database_handle_) return result;
+    sqlite3_stmt *statement = nullptr;
+    const char *sql = "SELECT token,scope,literal_count,chinese_count,last_selected_at,last_literal FROM input_preference";
+    if (sqlite3_prepare_v2(database_handle_, sql, -1, &statement, nullptr) != SQLITE_OK) {
+        setError(sqlite3_errmsg(database_handle_));
+        return result;
+    }
+    while (sqlite3_step(statement) == SQLITE_ROW) result.push_back(preferenceRow(statement));
+    sqlite3_finalize(statement);
+    return result;
+}
+
 std::optional<Lexeme> LexiconStore::upsert(Lexeme lexeme) {
     if (lexeme.reading.empty() || lexeme.output.empty() || lexeme.reading.size() > 256 || lexeme.output.size() > 1024) return std::nullopt;
     std::scoped_lock lock(mutex_); if (!database_handle_) return std::nullopt; const int64_t now = nowSeconds();
@@ -63,7 +92,7 @@ std::optional<Lexeme> LexiconStore::upsert(Lexeme lexeme) {
 }
 
 bool LexiconStore::remove(int64_t id) { std::scoped_lock lock(mutex_); sqlite3_stmt *statement = nullptr; if (!database_handle_ || sqlite3_prepare_v2(database_handle_, "DELETE FROM lexeme WHERE id=?1", -1, &statement, nullptr) != SQLITE_OK) return false; sqlite3_bind_int64(statement, 1, id); const bool result = sqlite3_step(statement) == SQLITE_DONE; sqlite3_finalize(statement); return result; }
-bool LexiconStore::clearLearned() { std::scoped_lock lock(mutex_); return execute("DELETE FROM lexeme WHERE kind='learned'"); }
+bool LexiconStore::clearLearned() { std::scoped_lock lock(mutex_); return execute("BEGIN IMMEDIATE;DELETE FROM lexeme WHERE kind='learned';DELETE FROM input_preference;COMMIT;"); }
 bool LexiconStore::recordSelection(std::string_view reading, std::string_view output) {
     if (reading.empty() || output.empty() || reading.size() > 256 || output.size() > 1024) return false;
     std::scoped_lock lock(mutex_);
@@ -103,6 +132,38 @@ bool LexiconStore::recordSelection(std::string_view reading, std::string_view ou
         setError(sqlite3_errmsg(database_handle_));
         return rollback();
     }
+    if (!execute("COMMIT")) return rollback();
+    return true;
+}
+
+bool LexiconStore::recordInputPreference(std::string_view token, std::string_view scope, bool literal) {
+    if (token.empty() || token.size() > 256 || scope.size() > 128) return false;
+    std::scoped_lock lock(mutex_);
+    if (!database_handle_ || !execute("BEGIN IMMEDIATE")) return false;
+    const auto rollback = [this] {
+        execute("ROLLBACK");
+        return false;
+    };
+    const int64_t now = nowSeconds();
+    const char *sql = "INSERT INTO input_preference(token,scope,literal_count,chinese_count,last_selected_at,last_literal) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(token,scope) DO UPDATE SET literal_count=literal_count+excluded.literal_count,chinese_count=chinese_count+excluded.chinese_count,last_selected_at=excluded.last_selected_at,last_literal=excluded.last_literal";
+    const auto update = [&](std::string_view preferenceScope) {
+        sqlite3_stmt *statement = nullptr;
+        if (sqlite3_prepare_v2(database_handle_, sql, -1, &statement, nullptr) != SQLITE_OK) {
+            setError(sqlite3_errmsg(database_handle_));
+            return false;
+        }
+        bindText(statement, 1, token);
+        bindText(statement, 2, preferenceScope);
+        sqlite3_bind_int(statement, 3, literal ? 1 : 0);
+        sqlite3_bind_int(statement, 4, literal ? 0 : 1);
+        sqlite3_bind_int64(statement, 5, now);
+        sqlite3_bind_int(statement, 6, literal);
+        const bool updated = sqlite3_step(statement) == SQLITE_DONE;
+        if (!updated) setError(sqlite3_errmsg(database_handle_));
+        sqlite3_finalize(statement);
+        return updated;
+    };
+    if (!update({}) || (!scope.empty() && !update(scope))) return rollback();
     if (!execute("COMMIT")) return rollback();
     return true;
 }

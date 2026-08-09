@@ -22,10 +22,12 @@ public:
     std::string lastError() const;
     std::vector<Lexeme> list(std::string_view query = {}) const;
     std::vector<Lexeme> matching(std::string_view reading) const;
+    std::vector<InputPreference> inputPreferences() const;
     std::optional<Lexeme> upsert(Lexeme lexeme);
     bool remove(int64_t id);
     bool clearLearned();
     bool recordSelection(std::string_view reading, std::string_view output);
+    bool recordInputPreference(std::string_view token, std::string_view scope, bool literal);
     std::string exportJson() const;
     bool importJson(std::string_view document, std::string *reason = nullptr);
 

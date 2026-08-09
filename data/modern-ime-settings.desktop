@@ -6,5 +6,5 @@ Comment=Configure Modern IME
 Comment[zh_CN]=配置 Modern 输入法
 Exec=modern-ime-settings
 Icon=fcitx-pinyin
-Categories=Settings;Utility;
+Categories=Settings;
 Terminal=false

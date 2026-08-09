@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
         api.destroyOfflinePunctuation(punctuation);
         return 8;
     }
-    text = QString::fromUtf8(punctuated).trimmed();
+    text = QString::fromStdString(modernime::finalizeVoiceTranscript(QString::fromUtf8(punctuated).toUtf8().toStdString()));
     api.freeOfflinePunctuationText(punctuated);
     api.destroyOfflinePunctuation(punctuation);
     const double punctuationSeconds = static_cast<double>(punctuationTimer.nsecsElapsed()) / 1'000'000'000.0;

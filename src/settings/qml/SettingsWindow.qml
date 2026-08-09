@@ -229,7 +229,23 @@ Rectangle {
                 Column {
                     spacing: 18
                     Text { text: "输入"; color: "white"; font.pixelSize: 28; font.bold: true }
-                    DarkSwitch { text: "默认中文模式"; checked: root.config.chinese_mode === undefined || root.config.chinese_mode; onToggled: { root.config.chinese_mode = checked; settings.saveConfig(JSON.stringify(root.config)) } }
+                    Text { text: "输入策略"; color: "#cbd6e8"; font.pixelSize: 14 }
+                    ComboBox {
+                        width: 260
+                        model: ["智能混合", "中文优先", "英文直输"]
+                        currentIndex: root.config.input_mode === "chinese" ? 1 : root.config.input_mode === "english" ? 2 : 0
+                        onActivated: {
+                            root.config.input_mode = currentIndex === 1 ? "chinese" : currentIndex === 2 ? "english" : "auto"
+                            settings.saveConfig(JSON.stringify(root.config))
+                        }
+                    }
+                    Text { text: "智能混合会同时提供拼音和开发词原文，并记住你在不同应用中的选择。"; color: "#9aa8c2"; width: 620; wrapMode: Text.Wrap }
+                    DarkSwitch {
+                        text: "短按 Ctrl 切换智能混合 / 临时英文直输"
+                        checked: root.config.control_mode_toggle === undefined ? true : root.config.control_mode_toggle
+                        onToggled: { root.config.control_mode_toggle = checked; settings.saveConfig(JSON.stringify(root.config)) }
+                    }
+                    Text { text: "Ctrl 与其它按键组合时仍是普通应用快捷键；临时英文只作用于当前输入上下文，失焦或重置后恢复智能模式。"; color: "#9aa8c2"; width: 620; wrapMode: Text.Wrap }
                     DarkSwitch { text: "中文与英文、数字之间插入空格"; checked: root.config.insert_spacing; onToggled: { root.config.insert_spacing = checked; settings.saveConfig(JSON.stringify(root.config)) } }
                     SpinBox { from: 3; to: 9; value: root.config.candidate_count || 7; editable: true; onValueModified: { root.config.candidate_count = value; settings.saveConfig(JSON.stringify(root.config)) } }
                 }
@@ -483,7 +499,7 @@ Rectangle {
                     }
                     Text { text: root.captureMessage; color: root.captureField ? "#a9c7ff" : "#9fe1b6"; width: 680; wrapMode: Text.Wrap }
                     Rectangle { width: 680; height: 1; color: "#3b465d" }
-                    Text { text: "Space 选择首选候选、1–9 选择候选以及 Shift + 字母直接提交大写字母仍保持固定，避免与普通输入冲突。切换输入法的 Ctrl+Space 属于 Fcitx 全局设置，可在 fcitx5-configtool 的“全局选项”中修改。"; color: "#b8c5dc"; width: 680; wrapMode: Text.Wrap }
+                    Text { text: "智能模式下短按 Ctrl 可切换临时英文直输；Ctrl 与其它按键组合仍交给应用。Space 选择首选候选，1–9 选择候选。切换输入法的 Ctrl+Space 属于 Fcitx 全局设置，可在 fcitx5-configtool 的“全局选项”中修改。"; color: "#b8c5dc"; width: 680; wrapMode: Text.Wrap }
                 }
 
                 Column {
