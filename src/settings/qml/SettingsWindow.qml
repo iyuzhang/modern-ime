@@ -241,11 +241,11 @@ Rectangle {
                     }
                     Text { text: "智能混合会同时提供拼音和开发词原文，并记住你在不同应用中的选择。"; color: "#9aa8c2"; width: 620; wrapMode: Text.Wrap }
                     DarkSwitch {
-                        text: "短按 Ctrl 切换智能混合 / 临时中文"
+                        text: "快捷键切换智能混合 / 临时中文"
                         checked: root.config.control_mode_toggle === undefined ? true : root.config.control_mode_toggle
                         onToggled: { root.config.control_mode_toggle = checked; settings.saveConfig(JSON.stringify(root.config)) }
                     }
-                    Text { text: "临时中文会关闭开发词自动直输；Ctrl 与其它按键组合仍是普通应用快捷键，失焦或重置后恢复智能模式。"; color: "#9aa8c2"; width: 620; wrapMode: Text.Wrap }
+                    Text { text: "当前快捷键：" + root.hotkeyLabel(root.config.mode_toggle_hotkey || "Control+Alt+space") + "，可在“快捷键”页修改。临时中文会关闭开发词自动直输；失焦或重置后恢复智能模式。"; color: "#9aa8c2"; width: 620; wrapMode: Text.Wrap }
                     DarkSwitch { text: "中文与英文、数字之间插入空格"; checked: root.config.insert_spacing; onToggled: { root.config.insert_spacing = checked; settings.saveConfig(JSON.stringify(root.config)) } }
                     SpinBox { from: 3; to: 9; value: root.config.candidate_count || 7; editable: true; onValueModified: { root.config.candidate_count = value; settings.saveConfig(JSON.stringify(root.config)) } }
                 }
@@ -485,9 +485,10 @@ Rectangle {
                 Column {
                     spacing: 16
                     Text { text: "快捷键"; color: "white"; font.pixelSize: 28; font.bold: true }
-                    Text { text: "点击右侧按钮后直接按下想要的组合键。修改会立即写入配置并让 Fcitx 引擎重载；不接受重复或只有修饰键的绑定。"; color: "#b8c5dc"; width: 680; wrapMode: Text.Wrap }
+                    Text { text: "点击右侧按钮后直接按下想要的组合键。修改会立即写入配置并让 Fcitx 引擎重载；模式切换需包含修饰键，不接受重复绑定。"; color: "#b8c5dc"; width: 680; wrapMode: Text.Wrap }
                     Repeater {
                         model: [
+                            { field: "mode_toggle_hotkey", title: "智能混合 / 临时中文", hint: "默认 Ctrl+Alt+Space；仅智能混合模式生效" },
                             { field: "voice_hotkey", title: "语音输入", hint: "按住说话；默认 F8" },
                             { field: "cancel_hotkey", title: "取消组合/语音", hint: "默认 Esc" },
                             { field: "commit_raw_hotkey", title: "提交原文", hint: "默认 Enter" },
@@ -520,7 +521,7 @@ Rectangle {
                     }
                     Text { text: root.captureMessage; color: root.captureField ? "#a9c7ff" : "#9fe1b6"; width: 680; wrapMode: Text.Wrap }
                     Rectangle { width: 680; height: 1; color: "#3b465d" }
-                    Text { text: "智能模式下短按 Ctrl 可关闭智能判断并进入临时中文，再次短按恢复智能；Ctrl 与其它按键组合仍交给应用。Space 选择首选候选，1–9 选择候选。切换输入法的 Ctrl+Space 属于 Fcitx 全局设置，可在 fcitx5-configtool 的“全局选项”中修改。"; color: "#b8c5dc"; width: 680; wrapMode: Text.Wrap }
+                    Text { text: "智能模式下按 " + root.hotkeyLabel(root.config.mode_toggle_hotkey || "Control+Alt+space") + " 可进入临时中文，再按一次恢复智能；可在上方修改此快捷键。Space 选择首选候选，1–9 选择候选。切换输入法的 Ctrl+Space 属于 Fcitx 全局设置，可在 fcitx5-configtool 的“全局选项”中修改。"; color: "#b8c5dc"; width: 680; wrapMode: Text.Wrap }
                 }
 
                 Column {

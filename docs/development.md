@@ -41,7 +41,7 @@ CTest 当前包含：
 - offscreen 设置页 smoke test，覆盖首次安装时没有模型的界面加载，以及可选模型安装器的异步启动和完成状态。
 - 数字全零音频策略和候选窗错误提示回归；安装系统包后，offscreen 测试使用无激活目录的私有 D-Bus，禁止意外启动真实桌面服务。
 - Xvfb/xcb 候选窗层级和无焦点 smoke test。
-- 私有 Xvfb、D-Bus 和 Fcitx 会话中的真实 Qt 客户端端到端测试：覆盖连续组句、整句学习和运行中词库热更新；同一会话还输入 `git status`、`ls, ll`、`React`、`std::vector`、`main`、路径、命令参数和普通拼音，验证命令自动提交后候选窗隐藏、词元内英文直通、短按 Ctrl 临时中文/恢复智能、临时中文禁止 `git` 自动提交、Ctrl 组合键不误切、边界恢复、原文回车透传、中文标点、中英文间距及显式英文直输。
+- 私有 Xvfb、D-Bus 和 Fcitx 会话中的真实 Qt 客户端端到端测试：覆盖连续组句、整句学习和运行中词库热更新；同一会话还输入 `git status`、`ls, ll`、`React`、`std::vector`、`main`、路径、命令参数和普通拼音，验证命令自动提交后候选窗隐藏、词元内英文直通、`Ctrl+Alt+Space` 临时中文/恢复智能、临时中文禁止 `git` 自动提交、Ctrl 组合键不误切、边界恢复、原文回车透传、中文标点、中英文间距及显式英文直输。
 - 键盘候选 P95 延迟门槛。
 
 `modern-ime-asr-smoke` 需要已安装模型，用于固定音频的离线识别、标点、RTF 和 CER 检查，不属于默认 CTest。示例：
@@ -65,7 +65,7 @@ modern-ime-asr-smoke --wav sample.wav --hotwords ~/.local/share/modern-ime/voice
 
 ```bash
 ./tools/build-deb.sh
-sudo apt install ./dist/modern-ime_0.1.2_amd64.deb
+sudo apt install ./dist/modern-ime_0.1.4_amd64.deb
 ```
 
 构建脚本使用 `/usr` 前缀，运行 Release 构建和完整 CTest，再由 `dpkg-shlibdeps` 自动补充二进制库依赖。包内包含 Fcitx ABI 插件、输入法元数据、D-Bus 激活文件、systemd 用户服务、设置程序和可选模型下载器，但不包含语音模型。安装后的程序路径和服务文件不得混用 `~/.local` 路径。

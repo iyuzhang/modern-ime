@@ -181,7 +181,11 @@ bool Service::saveConfig() { config_.version++; QSaveFile file(pathString(paths_
 QString Service::GetConfig() { return toQString(serialize(config_)); }
 bool Service::validHotkeys(const ConfigSnapshot &config) const {
     if (!isValidVoiceModelId(toQString(config.model_id))) return false;
-    const std::array<std::string, 7> bindings{config.voice_hotkey, config.cancel_hotkey, config.commit_raw_hotkey, config.previous_page_hotkey, config.next_page_hotkey, config.previous_candidate_hotkey, config.next_candidate_hotkey};
+    const fcitx::Key modeKey(config.mode_toggle_hotkey);
+    if (!modeKey.isValid() || modeKey.isModifier() ||
+        !(modeKey.states().test(fcitx::KeyState::Ctrl) || modeKey.states().test(fcitx::KeyState::Alt) ||
+          modeKey.states().test(fcitx::KeyState::Shift) || modeKey.states().test(fcitx::KeyState::Super))) return false;
+    const std::array<std::string, 8> bindings{config.mode_toggle_hotkey, config.voice_hotkey, config.cancel_hotkey, config.commit_raw_hotkey, config.previous_page_hotkey, config.next_page_hotkey, config.previous_candidate_hotkey, config.next_candidate_hotkey};
     std::set<std::string> seen;
     for (const auto &binding : bindings) {
         const fcitx::Key key(binding);

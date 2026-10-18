@@ -87,9 +87,10 @@ struct ConfigSnapshot {
     // clients, but input_mode is authoritative when present.
     InputMode input_mode = InputMode::Auto;
     bool chinese_mode = true;
-    // A short Control press toggles a context-local Chinese override in Auto
-    // mode. Control combined with another key remains a normal modifier.
+    // Retain the existing on/off preference when migrating older configs.
     bool control_mode_toggle = true;
+    // Toggles a context-local Chinese override in Auto mode.
+    std::string mode_toggle_hotkey = "Control+Alt+space";
     bool insert_spacing = true;
     int candidate_count = 7;
     CandidateLayout layout = CandidateLayout::Horizontal;

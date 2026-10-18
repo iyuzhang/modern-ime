@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(modern-ime VERSION 0.1.2 LANGUAGES CXX)
+project(modern-ime VERSION 0.1.4 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CTest)

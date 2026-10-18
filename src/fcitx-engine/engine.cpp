@@ -53,7 +53,6 @@ private:
 };
 bool sensitive(const fcitx::InputContext *context) { return context->capabilityFlags().test(fcitx::CapabilityFlag::Password) || context->capabilityFlags().test(fcitx::CapabilityFlag::Sensitive); }
 bool isShiftKey(const fcitx::Key &key) { return key.sym() == FcitxKey_Shift_L || key.sym() == FcitxKey_Shift_R; }
-bool isControlKey(const fcitx::Key &key) { return key.sym() == FcitxKey_Control_L || key.sym() == FcitxKey_Control_R; }
 bool isLiteralWordCharacter(const fcitx::Key &key) {
     const auto text = fcitx::Key::keySymToUTF8(key.sym());
     return key.isLAZ() || key.isUAZ() || (text.size() == 1 && (text.front() == '.' || text.front() == '_' || text.front() == '-' || text.front() == '/' || text.front() == '@' || text.front() == ':' || text.front() == '+' || text.front() == '#' || text.front() == '>'));
@@ -119,7 +118,7 @@ ModernEngine::ModernEngine(fcitx::Instance *instance) : instance_(instance), fac
 }
 CompositionState *ModernEngine::state(fcitx::InputContext *context) { return context->propertyFor(&factory_); }
 void ModernEngine::activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) { auto *context = event.inputContext(); auto *current = state(context); current->focus_generation++; if (config_.input_mode != InputMode::Auto) current->manual_chinese = false; applyConfig(current); installInputPanelCallback(context); }
-void ModernEngine::reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) { auto *current = state(event.inputContext()); current->f8_pressed = false; current->shift_pressed = false; current->control_pressed = false; current->control_used = false; current->manual_chinese = false; current->pending_voice_release.reset(); current->pending_voice_commit.reset(); cancelVoice(event.inputContext()); clear(event.inputContext()); }
+void ModernEngine::reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) { auto *current = state(event.inputContext()); current->f8_pressed = false; current->shift_pressed = false; current->manual_chinese = false; current->pending_voice_release.reset(); current->pending_voice_commit.reset(); cancelVoice(event.inputContext()); clear(event.inputContext()); }
 std::string ModernEngine::subMode(const fcitx::InputMethodEntry &, fcitx::InputContext &context) {
     if (effectiveInputMode(state(&context)) == InputMode::English) return "英";
     if (effectiveInputMode(state(&context)) == InputMode::Chinese) return "中";
@@ -345,16 +344,12 @@ void ModernEngine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &ev
         current->shift_pressed = !event.isRelease();
         return;
     }
-    if (isControlKey(event.rawKey()) || isControlKey(key)) {
-        if (!event.isRelease()) {
-            current->control_pressed = true;
-            current->control_used = false;
-            return;
-        }
-        const bool shortPress = current->control_pressed && !current->control_used;
-        current->control_pressed = false;
-        current->control_used = false;
-        if (shortPress && config_.control_mode_toggle && config_.input_mode == InputMode::Auto) {
+    if (!event.isRelease() && config_.control_mode_toggle && config_.input_mode == InputMode::Auto &&
+        matchesHotkey(event, config_.mode_toggle_hotkey)) {
+        const bool repeated = event.rawKey().states().test(fcitx::KeyState::Repeat) ||
+                              event.origKey().states().test(fcitx::KeyState::Repeat) ||
+                              key.states().test(fcitx::KeyState::Repeat);
+        if (!repeated) {
             current->manual_chinese = !current->manual_chinese;
             current->literal_passthrough = false;
             if (!current->voice_session_id.empty()) cancelVoice(context);
@@ -362,9 +357,9 @@ void ModernEngine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &ev
             else clear(context);
             context->updateUserInterface(fcitx::UserInterfaceComponent::StatusArea);
         }
+        event.filterAndAccept();
         return;
     }
-    if (!event.isRelease() && current->control_pressed) current->control_used = true;
     if (matchesHotkey(event, config_.voice_hotkey)) {
         const bool repeated = event.rawKey().states().test(fcitx::KeyState::Repeat) ||
                               event.origKey().states().test(fcitx::KeyState::Repeat) ||

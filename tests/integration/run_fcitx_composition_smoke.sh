@@ -172,10 +172,21 @@ xdotool key --window "$window_id" period
 xdotool type --window "$window_id" --delay 10 git
 xdotool key --window "$window_id" Return
 
-# A short Control press disables automatic literal decisions for this input
-# context. A normal Control shortcut must not toggle first.
+# Neither a normal Control shortcut nor a short Control press may toggle mode.
 xdotool key --window "$window_id" ctrl+c
 xdotool key --window "$window_id" Control_L
+xdotool type --window "$window_id" --delay 10 git
+literal_after_control=$(gdbus call --session \
+  --dest org.modernime.UI1 \
+  --object-path /org/modernime/UI1 \
+  --method org.modernime.UI1.Status 2>/dev/null || true)
+if [[ $literal_after_control == *'"visible":true'* ]]; then
+  printf 'Control shortcut or short Control incorrectly toggled mode: %s\n' "$literal_after_control" >&2
+  exit 11
+fi
+xdotool key --window "$window_id" space
+# Only the configured full shortcut disables automatic literal decisions.
+xdotool key --window "$window_id" ctrl+alt+space
 xdotool type --window "$window_id" --delay 10 git
 manual_status=
 for _ in $(seq 1 20); do
@@ -187,13 +198,13 @@ for _ in $(seq 1 20); do
   sleep 0.02
 done
 if [[ $manual_status != *'"visible":true'* || $manual_status != *'"preedit":"git"'* ]]; then
-  printf 'Short Control did not keep git in Chinese composition: %s\n' "$manual_status" >&2
+  printf 'Mode shortcut did not keep git in Chinese composition: %s\n' "$manual_status" >&2
   exit 10
 fi
 xdotool key --window "$window_id" Escape
 xdotool type --window "$window_id" --delay 10 nihao
 xdotool key --window "$window_id" space
-xdotool key --window "$window_id" Control_L
+xdotool key --window "$window_id" ctrl+alt+space
 xdotool type --window "$window_id" --delay 10 git
 xdotool key --window "$window_id" space
 
@@ -215,7 +226,7 @@ wait "$client_pid"
 client_pid=
 result=$(sed -n 's/^RESULT=//p' "$smoke_root/client.log")
 return_count=$(sed -n 's/^RETURN_COUNT=//p' "$smoke_root/client.log")
-expected='妙控触摸板妙控触摸板 git status ls, ll React std::vector main make sha256 你好/usr/local/bin --help 你好.git 你好 git EnglishMode'
+expected='妙控触摸板妙控触摸板 git status ls, ll React std::vector main make sha256 你好/usr/local/bin --help 你好.gitgit 你好 git EnglishMode'
 if [[ $result != "$expected" ]]; then
   printf 'Expected %s, got %s\n' "$expected" "$result" >&2
   cat "$smoke_root/fcitx.log" >&2

@@ -12,18 +12,22 @@ TEST_CASE("input strategy defaults to automatic mixed input and round trips") {
     modernime::ConfigSnapshot input;
     REQUIRE(input.input_mode == modernime::InputMode::Auto);
     REQUIRE(input.control_mode_toggle);
+    REQUIRE(input.mode_toggle_hotkey == "Control+Alt+space");
     input.input_mode = modernime::InputMode::Chinese;
     input.control_mode_toggle = false;
+    input.mode_toggle_hotkey = "Control+Shift+m";
     auto parsed = modernime::parseConfigSnapshot(modernime::serialize(input));
     REQUIRE(parsed);
     REQUIRE(parsed->input_mode == modernime::InputMode::Chinese);
     REQUIRE_FALSE(parsed->control_mode_toggle);
+    REQUIRE(parsed->mode_toggle_hotkey == "Control+Shift+m");
     parsed = modernime::parseConfigSnapshot("{\"protocol_version\":1,\"chinese_mode\":false}");
     REQUIRE(parsed);
     REQUIRE(parsed->input_mode == modernime::InputMode::English);
     parsed = modernime::parseConfigSnapshot("{\"protocol_version\":1,\"shift_mode_toggle\":false}");
     REQUIRE(parsed);
     REQUIRE_FALSE(parsed->control_mode_toggle);
+    REQUIRE(parsed->mode_toggle_hotkey == "Control+Alt+space");
 }
 TEST_CASE("candidate themes round trip and unknown themes retain the current default") {
     const std::vector<modernime::CandidateTheme> themes{

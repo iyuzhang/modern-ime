@@ -28,8 +28,6 @@ public:
     bool voice_recording = false;
     bool f8_pressed = false;
     bool shift_pressed = false;
-    bool control_pressed = false;
-    bool control_used = false;
     bool manual_chinese = false;
     bool literal_prefix = false;
     bool literal_passthrough = false;
