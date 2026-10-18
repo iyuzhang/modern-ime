@@ -172,6 +172,32 @@ done
 sleep 0.2
 xdotool type --window "$window_id" --delay 10 nihao
 xdotool key --window "$window_id" space
+# A complete developer word should commit at once, while adjacent pinyin
+# starts a new Chinese composition without requiring a typed separator.
+xdotool type --window "$window_id" --delay 10 agentnihao
+adjacent_status=
+for _ in $(seq 1 20); do
+  adjacent_status=$(gdbus call --session \
+    --dest org.modernime.UI1 \
+    --object-path /org/modernime/UI1 \
+    --method org.modernime.UI1.Status 2>/dev/null || true)
+  if [[ $adjacent_status == *'"visible":true'* && $adjacent_status == *'"preedit":"nihao"'* ]]; then break; fi
+  sleep 0.02
+done
+if [[ $adjacent_status != *'"visible":true'* || $adjacent_status != *'"preedit":"nihao"'* ]]; then
+  printf 'Adjacent pinyin did not resume Chinese composition: %s\n' "$adjacent_status" >&2
+  exit 12
+fi
+xdotool key --window "$window_id" space
+# Known English continuations such as gitlab remain English without a space.
+xdotool type --window "$window_id" --delay 10 gitlab
+xdotool key --window "$window_id" space
+# A typed separator between an English word and pinyin remains present.
+xdotool type --window "$window_id" --delay 10 agent
+xdotool key --window "$window_id" space
+xdotool type --window "$window_id" --delay 10 nihao
+xdotool key --window "$window_id" space
+xdotool key --window "$window_id" space
 xdotool type --window "$window_id" --delay 10 '/usr/local/bin'
 xdotool key --window "$window_id" space
 xdotool type --window "$window_id" --delay 10 -- '--help'
@@ -235,7 +261,7 @@ wait "$client_pid"
 client_pid=
 result=$(sed -n 's/^RESULT=//p' "$smoke_root/client.log")
 return_count=$(sed -n 's/^RETURN_COUNT=//p' "$smoke_root/client.log")
-expected='妙控触摸板妙控触摸板 git status ls, ll React std::vector main make sha256 你好/usr/local/bin --help 你好.gitgit 你好 git EnglishMode'
+expected='妙控触摸板妙控触摸板 git status ls, ll React std::vector main make sha256 你好 agent你好 gitlab agent 你好 /usr/local/bin --help 你好.gitgit 你好 git EnglishMode'
 if [[ $result != "$expected" ]]; then
   printf 'Expected %s, got %s\n' "$expected" "$result" >&2
   cat "$smoke_root/fcitx.log" >&2

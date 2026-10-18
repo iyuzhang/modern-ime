@@ -121,6 +121,8 @@ TEST_CASE("high confidence literals auto commit while ambiguous pinyin stays edi
     REQUIRE_FALSE(core.shouldAutoCommitLiteral("main", features, main));
     REQUIRE_FALSE(core.shouldAutoCommitLiteral("nihao", features, nihao));
     REQUIRE(core.shouldAutoCommitLiteral("React", features, react));
+    REQUIRE(core.knownDeveloperWord("gitlab"));
+    REQUIRE_FALSE(core.knownDeveloperWord("agentnihao"));
     for (const auto token : {"n", "ai"}) {
         REQUIRE(core.lexicon().recordInputPreference(token, {}, true));
         REQUIRE(core.lexicon().recordInputPreference(token, {}, true));

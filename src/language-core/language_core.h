@@ -36,6 +36,7 @@ public:
     std::vector<Candidate> candidates(std::string_view input, size_t limit, const InputContextFeatures &features = {}) const;
     bool prefersLiteral(std::string_view input, const InputContextFeatures &features = {}) const;
     bool shouldAutoCommitLiteral(std::string_view input, const InputContextFeatures &features, const std::vector<Candidate> &candidates) const;
+    bool knownDeveloperWord(std::string_view input) const;
     bool shouldAppendDigit(std::string_view input, const InputContextFeatures &features = {}) const;
     std::string normalizeForCommit(std::string_view text) const;
     // Reloads the immutable user-lexicon snapshot outside the key-event path.

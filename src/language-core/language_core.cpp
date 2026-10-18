@@ -137,6 +137,8 @@ bool LanguageCore::shouldAutoCommitLiteral(std::string_view input, const InputCo
     return !isAmbiguousDeveloperWord(input);
 }
 
+bool LanguageCore::knownDeveloperWord(std::string_view input) const { return isDeveloperWord(input); }
+
 bool LanguageCore::shouldAppendDigit(std::string_view input, const InputContextFeatures &features) const {
     if (features.mode != InputMode::Auto || input.empty()) return false;
     if (features.code_context || hasDeveloperStructure(input)) return true;

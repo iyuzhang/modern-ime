@@ -117,7 +117,7 @@ ModernEngine::ModernEngine(fcitx::Instance *instance) : instance_(instance), fac
     reloadConfig();
 }
 CompositionState *ModernEngine::state(fcitx::InputContext *context) { return context->propertyFor(&factory_); }
-void ModernEngine::activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) { auto *context = event.inputContext(); auto *current = state(context); current->focus_generation++; if (config_.input_mode != InputMode::Auto) current->manual_chinese = false; applyConfig(current); installInputPanelCallback(context); }
+void ModernEngine::activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) { auto *context = event.inputContext(); auto *current = state(context); current->focus_generation++; current->recent_literal.clear(); if (config_.input_mode != InputMode::Auto) current->manual_chinese = false; applyConfig(current); installInputPanelCallback(context); }
 void ModernEngine::reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) { auto *current = state(event.inputContext()); current->f8_pressed = false; current->shift_pressed = false; current->manual_chinese = false; current->pending_voice_release.reset(); current->pending_voice_commit.reset(); cancelVoice(event.inputContext()); clear(event.inputContext()); }
 std::string ModernEngine::subMode(const fcitx::InputMethodEntry &, fcitx::InputContext &context) {
     if (effectiveInputMode(state(&context)) == InputMode::English) return "英";
@@ -130,17 +130,33 @@ void ModernEngine::installInputPanelCallback(fcitx::InputContext *context) {
         publish(input, !state(input)->buffer.empty());
     });
 }
-void ModernEngine::clear(fcitx::InputContext *context) { auto *current = state(context); current->buffer.clear(); current->selected_text.clear(); current->selected_reading.clear(); current->candidates.clear(); current->literal_prefix = false; current->literal_passthrough = false; context->inputPanel().reset(); installInputPanelCallback(context); context->updatePreedit(); context->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel); publish(context, false); }
+void ModernEngine::clear(fcitx::InputContext *context) { auto *current = state(context); current->buffer.clear(); current->selected_text.clear(); current->selected_reading.clear(); current->candidates.clear(); current->literal_prefix = false; current->literal_passthrough = false; current->recent_literal.clear(); context->inputPanel().reset(); installInputPanelCallback(context); context->updatePreedit(); context->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel); publish(context, false); }
 void ModernEngine::update(fcitx::InputContext *context, bool allowAutoCommit) {
     installInputPanelCallback(context);
     auto *current = state(context);
-    const auto features = inputFeatures(context, current);
+    if (allowAutoCommit && !current->buffer.empty() && effectiveInputMode(current) == InputMode::Auto &&
+        !current->recent_literal.empty() && current->selected_text.empty() &&
+        language_.knownDeveloperWord(current->recent_literal + current->buffer)) {
+        const auto combined = current->recent_literal + current->buffer;
+        context->commitString(current->buffer);
+        clear(context);
+        state(context)->recent_literal = combined;
+        return;
+    }
+    auto features = inputFeatures(context, current);
+    // After a complete lowercase developer word, treat following letters as
+    // a fresh Chinese-first composition until a delimiter or code signal.
+    if (!current->recent_literal.empty() && features.mode == InputMode::Auto) features.mode = InputMode::Chinese;
     current->candidates = language_.candidates(current->buffer, static_cast<size_t>(current->candidate_page_size) * kCandidatePageCount, features);
     if (allowAutoCommit && current->selected_text.empty() && language_.shouldAutoCommitLiteral(current->buffer, features, current->candidates)) {
+        const auto raw = current->buffer;
+        const bool continueLiteral = features.code_context || features.url || features.email ||
+                                     std::any_of(raw.begin(), raw.end(), [](unsigned char character) { return !(character >= 'a' && character <= 'z'); });
         const auto text = withContextSpacing(context, language_.normalizeForCommit(current->buffer), config_.insert_spacing);
         context->commitString(text);
         clear(context);
-        state(context)->literal_passthrough = true;
+        state(context)->literal_passthrough = continueLiteral;
+        if (!continueLiteral) state(context)->recent_literal = raw;
         return;
     }
     auto list = std::make_unique<fcitx::CommonCandidateList>(); list->setPageSize(current->candidate_page_size); list->setCursorKeepInSamePage(true); list->setLayoutHint(current->candidate_layout == CandidateLayout::Vertical ? fcitx::CandidateLayoutHint::Vertical : fcitx::CandidateLayoutHint::Horizontal); for (const auto &candidate : current->candidates) list->append<ModernCandidate>(this, candidate); const auto preedit = current->selected_text + current->buffer; context->inputPanel().setPreedit(fcitx::Text(preedit)); context->inputPanel().setClientPreedit(fcitx::Text(preedit)); context->inputPanel().setCandidateList(std::move(list)); context->updatePreedit(); context->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel); publish(context, true);
@@ -200,7 +216,11 @@ void ModernEngine::selectCandidate(fcitx::InputContext *context, Candidate candi
     if (!current->selected_text.empty()) {
         service.asyncCall(QStringLiteral("RecordSelection"), QString::fromUtf8(current->selected_reading + advance->selected_reading), QString::fromUtf8(advance->composed_text));
     }
-    context->commitString(withContextSpacing(context, language_.normalizeForCommit(advance->composed_text), config_.insert_spacing));
+    auto text = language_.normalizeForCommit(advance->composed_text);
+    // Preserve the boundary the user typed after an auto-committed word.
+    // A typed separator clears recent_literal and keeps normal spacing rules.
+    if (current->recent_literal.empty()) text = withContextSpacing(context, std::move(text), config_.insert_spacing);
+    context->commitString(text);
     clear(context);
 }
 void ModernEngine::reloadConfig() {
@@ -352,6 +372,7 @@ void ModernEngine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &ev
         if (!repeated) {
             current->manual_chinese = !current->manual_chinese;
             current->literal_passthrough = false;
+            current->recent_literal.clear();
             if (!current->voice_session_id.empty()) cancelVoice(context);
             if (!current->buffer.empty() || !current->selected_text.empty()) update(context);
             else clear(context);
@@ -407,6 +428,7 @@ void ModernEngine::keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &ev
     }
     if (event.isRelease()) return;
     const bool shiftedLetter = (current->shift_pressed || event.rawKey().states().test(fcitx::KeyState::Shift) || event.origKey().states().test(fcitx::KeyState::Shift) || key.isUAZ()) && (key.isLAZ() || key.isUAZ());
+    if (!current->recent_literal.empty() && current->buffer.empty() && (!key.isLAZ() || shiftedLetter)) current->recent_literal.clear();
     if (current->literal_passthrough) {
         const auto text = fcitx::Key::keySymToUTF8(key.sym());
         const bool wordCharacter = key.isLAZ() || key.isUAZ() || key.digitSelection() >= 0 || key.check(FcitxKey_BackSpace) ||

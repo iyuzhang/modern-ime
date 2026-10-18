@@ -31,6 +31,7 @@ public:
     bool manual_chinese = false;
     bool literal_prefix = false;
     bool literal_passthrough = false;
+    std::string recent_literal;
     std::unique_ptr<fcitx::EventSource> pending_voice_release;
     std::unique_ptr<fcitx::EventSource> pending_voice_commit;
     VoiceTriggerMode voice_trigger = VoiceTriggerMode::PushToTalk;
