@@ -121,6 +121,13 @@ TEST_CASE("high confidence literals auto commit while ambiguous pinyin stays edi
     REQUIRE_FALSE(core.shouldAutoCommitLiteral("main", features, main));
     REQUIRE_FALSE(core.shouldAutoCommitLiteral("nihao", features, nihao));
     REQUIRE(core.shouldAutoCommitLiteral("React", features, react));
+    for (const auto token : {"n", "ai"}) {
+        REQUIRE(core.lexicon().recordInputPreference(token, {}, true));
+        REQUIRE(core.lexicon().recordInputPreference(token, {}, true));
+    }
+    core.refreshUserLexicon();
+    REQUIRE_FALSE(core.shouldAutoCommitLiteral("n", features, core.candidates("n", 9, features)));
+    REQUIRE_FALSE(core.shouldAutoCommitLiteral("ai", features, core.candidates("ai", 9, features)));
     REQUIRE(core.lexicon().recordInputPreference("main", {}, true));
     core.refreshUserLexicon();
     const auto learnedMain = core.candidates("main", 9, features);

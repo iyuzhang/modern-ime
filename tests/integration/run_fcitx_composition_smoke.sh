@@ -161,6 +161,15 @@ xdotool key --window "$window_id" 1
 xdotool key --window "$window_id" space
 xdotool type --window "$window_id" --delay 10 sha256
 xdotool key --window "$window_id" space
+# A learned one-letter raw preference must not submit the first letter of
+# a longer pinyin word and pass the rest through as English.
+for _ in 1 2; do
+  gdbus call --session \
+    --dest org.modernime.Service1 \
+    --object-path /org/modernime/Service1 \
+    --method org.modernime.Service1.RecordInputPreference n '' true >/dev/null
+done
+sleep 0.2
 xdotool type --window "$window_id" --delay 10 nihao
 xdotool key --window "$window_id" space
 xdotool type --window "$window_id" --delay 10 '/usr/local/bin'

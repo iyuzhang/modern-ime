@@ -46,7 +46,7 @@ Modern IME 是一个面向 Fcitx5 的本地输入法，将全拼、英文原文�
 推荐使用 Debian 安装包。拿到项目生成的 `.deb` 后，在文件所在目录运行：
 
 ```bash
-sudo apt install ./modern-ime_0.1.4_amd64.deb
+sudo apt install ./modern-ime_0.1.5_amd64.deb
 ```
 
 安装完成后，从应用菜单打开“Modern 输入法”，点击“启用 Modern IME”，再用 `Ctrl+Space` 或 Fcitx 输入法切换器选择它。首次使用语音时，在设置的“语音”页点击“下载离线语音模型”；键盘输入不需要下载模型。

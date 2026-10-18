@@ -129,6 +129,9 @@ bool LanguageCore::shouldAutoCommitLiteral(std::string_view input, const InputCo
     if (features.mode != InputMode::Auto || input.empty()) return false;
     if (hasDeveloperStructure(input) || features.url || features.email || features.code_context) return true;
     const bool developerWord = isDeveloperWord(input);
+    // A learned raw choice for "n" or "ai" must not commit the beginning of
+    // a longer pinyin word before the user can finish typing it.
+    if (!developerWord && input.size() <= 2 && isPinyinInput(input)) return false;
     if (const auto learned = learnedLiteralPreference(input, features, !developerWord)) return *learned;
     if (!developerWord) return false;
     return !isAmbiguousDeveloperWord(input);

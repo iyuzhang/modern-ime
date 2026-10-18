@@ -65,7 +65,7 @@ modern-ime-asr-smoke --wav sample.wav --hotwords ~/.local/share/modern-ime/voice
 
 ```bash
 ./tools/build-deb.sh
-sudo apt install ./dist/modern-ime_0.1.4_amd64.deb
+sudo apt install ./dist/modern-ime_0.1.5_amd64.deb
 ```
 
 构建脚本使用 `/usr` 前缀，运行 Release 构建和完整 CTest，再由 `dpkg-shlibdeps` 自动补充二进制库依赖。包内包含 Fcitx ABI 插件、输入法元数据、D-Bus 激活文件、systemd 用户服务、设置程序和可选模型下载器，但不包含语音模型。安装后的程序路径和服务文件不得混用 `~/.local` 路径。
